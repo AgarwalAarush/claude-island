@@ -166,6 +166,7 @@ class NotchViewModel: ObservableObject {
         if isHovering && (status == .closed || status == .popping) {
             let workItem = DispatchWorkItem { [weak self] in
                 guard let self = self, self.isHovering else { return }
+                NSHapticFeedbackManager.defaultPerformer.perform(.alignment, performanceTime: .now)
                 self.notchOpen(reason: .hover)
             }
             hoverTimer = workItem
