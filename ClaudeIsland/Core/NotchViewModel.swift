@@ -196,15 +196,15 @@ class NotchViewModel: ObservableObject {
 
         switch status {
         case .opened:
+            // Click outside the panel → close (and re-post the click so it reaches whatever's behind us).
+            // We deliberately do NOT have a "click the notch area to toggle close" branch here:
+            // when the overlay was tucked into the physical notch, that branch let users click the
+            // visible notch tab to dismiss the panel. With the top-right reposition, the notch rect
+            // overlaps the opened panel's top-right header — including the three-dots menu button —
+            // so the toggle branch was firing on every header button click and snapping the panel shut.
             if geometry.isPointOutsidePanel(location, size: openedSize) {
                 notchClose()
-                // Re-post the click so it reaches the window/app behind us
                 repostClickAt(location)
-            } else if geometry.notchScreenRect.contains(location) {
-                // Clicking notch while opened - only close if NOT in chat mode
-                if !isInChatMode {
-                    notchClose()
-                }
             }
         case .closed, .popping:
             if geometry.isPointInNotch(location) {
