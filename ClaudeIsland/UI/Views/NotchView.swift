@@ -23,7 +23,7 @@ struct NotchView: View {
     @State private var previousPendingIds: Set<String> = []
     @State private var previousWaitingForInputIds: Set<String> = []
     @State private var waitingForInputTimestamps: [String: Date] = [:]  // sessionId -> when it entered waitingForInput
-    @State private var isVisible: Bool = false
+    @State private var isVisible: Bool = true
     @State private var isHovering: Bool = false
     @State private var isBouncing: Bool = false
 
@@ -127,6 +127,11 @@ struct NotchView: View {
         )
     }
 
+    /// Corner radius for the floating pill (closed = fully rounded; opened = 20pt)
+    private var currentCornerRadius: CGFloat {
+        viewModel.status == .opened ? 20 : closedNotchSize.height / 2
+    }
+
     // Animation springs
     private let openAnimation = Animation.spring(response: 0.42, dampingFraction: 0.8, blendDuration: 0)
     private let closeAnimation = Animation.spring(response: 0.45, dampingFraction: 1.0, blendDuration: 0)
@@ -140,7 +145,7 @@ struct NotchView: View {
                 notchLayout
                     .frame(
                         maxWidth: viewModel.status == .opened ? notchSize.width : nil,
-                        alignment: .top
+                        alignment: .topTrailing
                     )
                     .padding(
                         .horizontal,
@@ -150,21 +155,15 @@ struct NotchView: View {
                     )
                     .padding([.horizontal, .bottom], viewModel.status == .opened ? 12 : 0)
                     .background(.black)
-                    .clipShape(currentNotchShape)
-                    .overlay(alignment: .top) {
-                        Rectangle()
-                            .fill(.black)
-                            .frame(height: 1)
-                            .padding(.horizontal, topCornerRadius)
-                    }
+                    .clipShape(RoundedRectangle(cornerRadius: currentCornerRadius, style: .continuous))
                     .shadow(
-                        color: (viewModel.status == .opened || isHovering) ? .black.opacity(0.7) : .clear,
-                        radius: 6
+                        color: .black.opacity((viewModel.status == .opened || isHovering) ? 0.7 : 0.4),
+                        radius: (viewModel.status == .opened || isHovering) ? 8 : 4
                     )
                     .frame(
                         maxWidth: viewModel.status == .opened ? notchSize.width : nil,
                         maxHeight: viewModel.status == .opened ? notchSize.height : nil,
-                        alignment: .top
+                        alignment: .topTrailing
                     )
                     .animation(viewModel.status == .opened ? openAnimation : closeAnimation, value: viewModel.status)
                     .animation(openAnimation, value: notchSize) // Animate container size changes between content types
@@ -186,14 +185,12 @@ struct NotchView: View {
             }
         }
         .opacity(isVisible ? 1 : 0)
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
+        .padding(.top, viewModel.geometry.menuBarHeight + 8)
+        .padding(.trailing, 8)
         .preferredColorScheme(.dark)
         .onAppear {
             sessionMonitor.startMonitoring()
-            // On non-notched devices, keep visible so users have a target to interact with
-            if !viewModel.hasPhysicalNotch {
-                isVisible = true
-            }
         }
         .onChange(of: viewModel.status) { oldStatus, newStatus in
             handleStatusChange(from: oldStatus, to: newStatus)
@@ -231,7 +228,7 @@ struct NotchView: View {
                     .frame(width: notchSize.width - 24) // Fixed width to prevent reflow
                     .transition(
                         .asymmetric(
-                            insertion: .scale(scale: 0.8, anchor: .top)
+                            insertion: .scale(scale: 0.8, anchor: .topTrailing)
                                 .combined(with: .opacity)
                                 .animation(.smooth(duration: 0.35)),
                             removal: .opacity.animation(.easeOut(duration: 0.15))
@@ -267,10 +264,18 @@ struct NotchView: View {
                 // Opened: show header content
                 openedHeaderContent
             } else if !showClosedActivity {
-                // Closed without activity: empty space
-                Rectangle()
-                    .fill(.clear)
-                    .frame(width: closedNotchSize.width - 20)
+                // Closed without activity: centered Claude crab so the pill always has a visible mark
+                ClaudeCrabIcon(size: 14)
+                    .matchedGeometryEffect(
+                        id: "crab",
+                        in: activityNamespace,
+                        isSource: !showClosedActivity && viewModel.status == .closed
+                    )
+                    .frame(
+                        width: closedNotchSize.width - 20,
+                        height: closedNotchSize.height,
+                        alignment: .center
+                    )
             } else {
                 // Closed with activity: black spacer (with optional bounce)
                 Rectangle()
@@ -375,43 +380,22 @@ struct NotchView: View {
         if isAnyProcessing || hasPendingPermission {
             // Show claude activity when processing or waiting for permission
             activityCoordinator.showActivity(type: .claude)
-            isVisible = true
-        } else if hasWaitingForInput {
-            // Keep visible for waiting-for-input but hide the processing spinner
-            activityCoordinator.hideActivity()
-            isVisible = true
         } else {
-            // Hide activity when done
+            // Hide activity when done - overlay itself stays visible (top-right pill)
             activityCoordinator.hideActivity()
-
-            // Delay hiding the notch until animation completes
-            // Don't hide on non-notched devices - users need a visible target
-            if viewModel.status == .closed && viewModel.hasPhysicalNotch {
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
-                    if !isAnyProcessing && !hasPendingPermission && !hasWaitingForInput && viewModel.status == .closed {
-                        isVisible = false
-                    }
-                }
-            }
         }
     }
 
     private func handleStatusChange(from oldStatus: NotchStatus, to newStatus: NotchStatus) {
         switch newStatus {
         case .opened, .popping:
-            isVisible = true
             // Clear waiting-for-input timestamps only when manually opened (user acknowledged)
             if viewModel.openReason == .click || viewModel.openReason == .hover {
                 waitingForInputTimestamps.removeAll()
             }
         case .closed:
-            // Don't hide on non-notched devices - users need a visible target
-            guard viewModel.hasPhysicalNotch else { return }
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
-                if viewModel.status == .closed && !isAnyProcessing && !hasPendingPermission && !hasWaitingForInput && !activityCoordinator.expandingActivity.show {
-                    isVisible = false
-                }
-            }
+            // Overlay stays visible as the top-right pill; no hiding.
+            break
         }
     }
 

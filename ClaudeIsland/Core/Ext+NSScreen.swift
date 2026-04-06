@@ -50,4 +50,9 @@ extension NSScreen {
     var hasPhysicalNotch: Bool {
         safeAreaInsets.top > 0
     }
+
+    /// Height of the system menu bar on this screen (notched: ~38pt, non-notched: ~24pt)
+    var menuBarHeight: CGFloat {
+        frame.maxY - visibleFrame.maxY
+    }
 }

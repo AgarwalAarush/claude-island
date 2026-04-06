@@ -98,11 +98,12 @@ class NotchViewModel: ObservableObject {
 
     // MARK: - Initialization
 
-    init(deviceNotchRect: CGRect, screenRect: CGRect, windowHeight: CGFloat, hasPhysicalNotch: Bool) {
+    init(deviceNotchRect: CGRect, screenRect: CGRect, windowHeight: CGFloat, menuBarHeight: CGFloat, hasPhysicalNotch: Bool) {
         self.geometry = NotchGeometry(
             deviceNotchRect: deviceNotchRect,
             screenRect: screenRect,
-            windowHeight: windowHeight
+            windowHeight: windowHeight,
+            menuBarHeight: menuBarHeight
         )
         self.hasPhysicalNotch = hasPhysicalNotch
         setupEventHandlers()

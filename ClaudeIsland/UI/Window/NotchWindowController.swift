@@ -19,6 +19,7 @@ class NotchWindowController: NSWindowController {
 
         let screenFrame = screen.frame
         let notchSize = screen.notchSize
+        let menuBarHeight = screen.menuBarHeight
 
         // Window covers full width at top, tall enough for largest content (chat view)
         let windowHeight: CGFloat = 750
@@ -42,6 +43,7 @@ class NotchWindowController: NSWindowController {
             deviceNotchRect: deviceNotchRect,
             screenRect: screenFrame,
             windowHeight: windowHeight,
+            menuBarHeight: menuBarHeight,
             hasPhysicalNotch: screen.hasPhysicalNotch
         )
 

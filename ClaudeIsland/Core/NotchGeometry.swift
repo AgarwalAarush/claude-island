@@ -2,23 +2,28 @@
 //  NotchGeometry.swift
 //  ClaudeIsland
 //
-//  Geometry calculations for the notch
+//  Geometry calculations for the floating top-right overlay
 //
 
 import CoreGraphics
 import Foundation
 
-/// Pure geometry calculations for the notch
+/// Pure geometry calculations for the top-right floating overlay
 struct NotchGeometry: Sendable {
     let deviceNotchRect: CGRect
     let screenRect: CGRect
     let windowHeight: CGFloat
+    let menuBarHeight: CGFloat
 
-    /// The notch rect in screen coordinates (for hit testing with global mouse position)
+    /// Padding between the overlay and the screen edges
+    static let topInset: CGFloat = 8
+    static let rightInset: CGFloat = 8
+
+    /// The closed-state indicator rect in screen coordinates (for hit testing with global mouse position)
     var notchScreenRect: CGRect {
         CGRect(
-            x: screenRect.midX - deviceNotchRect.width / 2,
-            y: screenRect.maxY - deviceNotchRect.height,
+            x: screenRect.maxX - deviceNotchRect.width - Self.rightInset,
+            y: screenRect.maxY - menuBarHeight - Self.topInset - deviceNotchRect.height,
             width: deviceNotchRect.width,
             height: deviceNotchRect.height
         )
@@ -30,14 +35,14 @@ struct NotchGeometry: Sendable {
         let width = size.width - 6
         let height = size.height - 30
         return CGRect(
-            x: screenRect.midX - width / 2,
-            y: screenRect.maxY - height,
+            x: screenRect.maxX - width - Self.rightInset,
+            y: screenRect.maxY - menuBarHeight - Self.topInset - height,
             width: width,
             height: height
         )
     }
 
-    /// Check if a point is in the notch area (with padding for easier interaction)
+    /// Check if a point is in the closed-state indicator area (with padding for easier interaction)
     func isPointInNotch(_ point: CGPoint) -> Bool {
         notchScreenRect.insetBy(dx: -10, dy: -5).contains(point)
     }

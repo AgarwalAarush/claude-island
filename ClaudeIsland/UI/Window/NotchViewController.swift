@@ -44,31 +44,32 @@ class NotchViewController: NSViewController {
             let vm = self.viewModel
             let geometry = vm.geometry
 
-            // Window coordinates: origin at bottom-left, Y increases upward
-            // The window is positioned at top of screen, so panel is at top of window
+            // Window coordinates: origin at bottom-left, Y increases upward.
+            // The window is positioned at top of screen, so top-of-window = `windowHeight`.
+            // The floating pill lives at `(screenMax - rightInset, screenMax - menuBarHeight - topInset)`
+            // in screen coords, which maps to the same right-edge math in window coords.
             let windowHeight = geometry.windowHeight
+            let screenWidth = geometry.screenRect.width
+            let topOffset = geometry.menuBarHeight + NotchGeometry.topInset
+            let rightInset = NotchGeometry.rightInset
 
             switch vm.status {
             case .opened:
                 let panelSize = vm.openedSize
-                // Panel is centered horizontally, anchored to top
                 let panelWidth = panelSize.width + 52  // Account for corner radius padding
                 let panelHeight = panelSize.height
-                let screenWidth = geometry.screenRect.width
                 return CGRect(
-                    x: (screenWidth - panelWidth) / 2,
-                    y: windowHeight - panelHeight,
+                    x: screenWidth - panelWidth - rightInset,
+                    y: windowHeight - topOffset - panelHeight,
                     width: panelWidth,
                     height: panelHeight
                 )
             case .closed, .popping:
-                // When closed, use the notch rect
+                // When closed, use the indicator rect anchored top-right with hover padding
                 let notchRect = geometry.deviceNotchRect
-                let screenWidth = geometry.screenRect.width
-                // Add some padding for easier interaction
                 return CGRect(
-                    x: (screenWidth - notchRect.width) / 2 - 10,
-                    y: windowHeight - notchRect.height - 5,
+                    x: screenWidth - notchRect.width - rightInset - 10,
+                    y: windowHeight - topOffset - notchRect.height - 5,
                     width: notchRect.width + 20,
                     height: notchRect.height + 10
                 )
