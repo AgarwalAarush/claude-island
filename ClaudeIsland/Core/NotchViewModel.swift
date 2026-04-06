@@ -95,6 +95,7 @@ class NotchViewModel: ObservableObject {
     private var cancellables = Set<AnyCancellable>()
     private let events = EventMonitors.shared
     private var hoverTimer: DispatchWorkItem?
+    private var mouseLeaveTimer: DispatchWorkItem?
 
     // MARK: - Initialization
 
@@ -162,6 +163,12 @@ class NotchViewModel: ObservableObject {
         hoverTimer?.cancel()
         hoverTimer = nil
 
+        // Mouse re-entered after a leave — cancel any pending close.
+        if isHovering {
+            mouseLeaveTimer?.cancel()
+            mouseLeaveTimer = nil
+        }
+
         // Start hover timer to auto-expand after the configured delay
         if isHovering && (status == .closed || status == .popping) {
             let workItem = DispatchWorkItem { [weak self] in
@@ -171,6 +178,16 @@ class NotchViewModel: ObservableObject {
             }
             hoverTimer = workItem
             DispatchQueue.main.asyncAfter(deadline: .now() + NotchTunables.hoverOpenDelay, execute: workItem)
+        }
+
+        // Mouse just left while the panel is open — schedule auto-close after a grace period.
+        if !isHovering && status == .opened {
+            let workItem = DispatchWorkItem { [weak self] in
+                guard let self = self, !self.isHovering, self.status == .opened else { return }
+                self.notchClose()
+            }
+            mouseLeaveTimer = workItem
+            DispatchQueue.main.asyncAfter(deadline: .now() + NotchTunables.mouseLeaveCloseDelay, execute: workItem)
         }
     }
 
