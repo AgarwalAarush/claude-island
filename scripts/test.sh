@@ -21,6 +21,7 @@ trap 'rm -rf "$BUILD_DIR"' EXIT
 declare -a TEST_SOURCES
 TEST_SOURCES=(
     "NotchGeometryTests.swift|ClaudeIsland/Core/NotchGeometry.swift"
+    "NotchTunablesTests.swift|ClaudeIsland/Core/NotchTunables.swift"
 )
 
 FILTER="${1:-}"
