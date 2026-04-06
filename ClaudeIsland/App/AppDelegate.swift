@@ -28,6 +28,11 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         super.init()
         AppDelegate.shared = self
 
+        // Initialize Mixpanel as early as possible so any later call to
+        // Mixpanel.mainInstance() (including applicationWillTerminate on the
+        // single-instance-guard termination path) is safe.
+        Mixpanel.initialize(token: "49814c1436104ed108f3fc4735228496")
+
         do {
             try updater.start()
         } catch {
@@ -40,8 +45,6 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             NSApplication.shared.terminate(nil)
             return
         }
-
-        Mixpanel.initialize(token: "49814c1436104ed108f3fc4735228496")
 
         let distinctId = getOrCreateDistinctId()
         Mixpanel.mainInstance().identify(distinctId: distinctId)
