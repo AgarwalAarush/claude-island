@@ -203,7 +203,8 @@ actor SessionStore {
 
                 // Skip creating top-level placeholder for subagent tools
                 // They'll appear under their parent Task instead
-                let isSubagentTool = session.subagentState.hasActiveSubagent && toolName != "Task"
+                let isSubagentTool = session.subagentState.hasActiveSubagent
+                    && toolName != "Task" && toolName != "Agent"
                 if isSubagentTool {
                     return
                 }
@@ -266,17 +267,18 @@ actor SessionStore {
     }
 
     private func processSubagentTracking(event: HookEvent, session: inout SessionState) {
+        let isSubagentLauncher = event.tool == "Task" || event.tool == "Agent"
         switch event.event {
         case "PreToolUse":
-            if event.tool == "Task", let toolUseId = event.toolUseId {
+            if isSubagentLauncher, let toolUseId = event.toolUseId {
                 let description = event.toolInput?["description"]?.value as? String
                 session.subagentState.startTask(taskToolId: toolUseId, description: description)
-                Self.logger.debug("Started Task subagent tracking: \(toolUseId.prefix(12), privacy: .public)")
+                Self.logger.debug("Started subagent tracking: \(toolUseId.prefix(12), privacy: .public)")
             }
 
         case "PostToolUse":
-            if event.tool == "Task" {
-                Self.logger.debug("PostToolUse for Task received")
+            if isSubagentLauncher {
+                Self.logger.debug("PostToolUse for subagent launcher received")
             }
 
         case "SubagentStop":
@@ -661,7 +663,7 @@ actor SessionStore {
         // Collect agentIds already claimed by other Tasks so discovery can skip them
         var claimedAgentIds: Set<String> = []
         for item in session.chatItems {
-            if case .toolCall(let t) = item.type, t.name == "Task" {
+            if case .toolCall(let t) = item.type, t.isSubagentLauncher {
                 if let activeAgentId = session.subagentState.activeTasks[item.id]?.agentId {
                     claimedAgentIds.insert(activeAgentId)
                 }
@@ -675,7 +677,7 @@ actor SessionStore {
 
         for i in 0..<session.chatItems.count {
             guard case .toolCall(var tool) = session.chatItems[i].type,
-                  tool.name == "Task" else { continue }
+                  tool.isSubagentLauncher else { continue }
 
             let taskToolId = session.chatItems[i].id
 
@@ -794,14 +796,14 @@ actor SessionStore {
     private func removeSubagentToolsFromTopLevel(session: inout SessionState) {
         var subagentIds: Set<String> = []
         for item in session.chatItems {
-            if case .toolCall(let tool) = item.type, tool.name == "Task" {
+            if case .toolCall(let tool) = item.type, tool.isSubagentLauncher {
                 subagentIds.formUnion(tool.subagentTools.map(\.id))
             }
         }
         guard !subagentIds.isEmpty else { return }
         let before = session.chatItems.count
         session.chatItems.removeAll { item in
-            guard case .toolCall(let tool) = item.type, tool.name != "Task" else { return false }
+            guard case .toolCall(let tool) = item.type, !tool.isSubagentLauncher else { return false }
             return subagentIds.contains(item.id)
         }
         let removed = before - session.chatItems.count
@@ -821,7 +823,7 @@ actor SessionStore {
         guard var session = sessions[sessionId] else { return }
         guard let idx = session.chatItems.firstIndex(where: { $0.id == taskToolId }),
               case .toolCall(var tool) = session.chatItems[idx].type,
-              tool.name == "Task" else { return }
+              tool.isSubagentLauncher else { return }
 
         tool.subagentTools = tools.map { info in
             SubagentToolCall(

@@ -89,7 +89,7 @@ class ChatHistoryManager: ObservableObject {
     private func filterOutSubagentTools(_ items: [ChatHistoryItem]) -> [ChatHistoryItem] {
         var subagentToolIds = Set<String>()
         for item in items {
-            if case .toolCall(let tool) = item.type, tool.name == "Task" {
+            if case .toolCall(let tool) = item.type, tool.isSubagentLauncher {
                 for subagentTool in tool.subagentTools {
                     subagentToolIds.insert(subagentTool.id)
                 }
@@ -129,6 +129,13 @@ struct ToolCallItem: Equatable, Sendable {
 
     /// For Task tools: nested subagent tool calls
     var subagentTools: [SubagentToolCall]
+
+    /// Whether this tool spawns a subagent (nested child tools). Claude Code
+    /// renamed the tool from "Task" to "Agent" in a newer version — accept
+    /// both so old and new transcripts both nest correctly.
+    var isSubagentLauncher: Bool {
+        name == "Task" || name == "Agent"
+    }
 
     /// Preview text for the tool (input-based)
     var inputPreview: String {

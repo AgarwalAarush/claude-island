@@ -658,9 +658,19 @@ struct ToolCallView: View {
         tool.result != nil || tool.structuredResult != nil
     }
 
-    /// Whether the tool can be expanded (has result, NOT Task tools, NOT Edit tools)
+    /// Whether the tool can be expanded (has result, NOT subagent launchers, NOT Edit tools)
     private var canExpand: Bool {
-        tool.name != "Task" && tool.name != "Edit" && hasResult
+        !tool.isSubagentLauncher && tool.name != "Edit" && hasResult
+    }
+
+    /// Display name for the tool row. Subagent launchers show their
+    /// `subagent_type` (e.g. "Explore") like Claude Code's own UI does;
+    /// everything else uses `MCPToolFormatter.formatToolName`.
+    private var toolDisplayName: String {
+        if tool.isSubagentLauncher {
+            return tool.input["subagent_type"].map { MCPToolFormatter.toTitleCase($0) } ?? "Agent"
+        }
+        return MCPToolFormatter.formatToolName(tool.name)
     }
 
     private var showContent: Bool {
@@ -690,14 +700,15 @@ struct ToolCallView: View {
                     }
 
                 // Tool name (formatted for MCP tools)
-                Text(MCPToolFormatter.formatToolName(tool.name))
+                Text(toolDisplayName)
                     .font(.system(size: 12, weight: .medium))
                     .foregroundColor(textColor)
                     .fixedSize()
 
-                if tool.name == "Task" && !tool.subagentTools.isEmpty {
+                if tool.isSubagentLauncher {
                     let taskDesc = tool.input["description"] ?? "Running agent..."
-                    Text("\(taskDesc) (\(tool.subagentTools.count) tools)")
+                    let countSuffix = tool.subagentTools.isEmpty ? "" : " (\(tool.subagentTools.count) tool\(tool.subagentTools.count == 1 ? "" : "s"))"
+                    Text("\(taskDesc)\(countSuffix)")
                         .font(.system(size: 11))
                         .foregroundColor(textColor.opacity(0.7))
                         .lineLimit(1)
@@ -735,8 +746,8 @@ struct ToolCallView: View {
                 }
             }
 
-            // Subagent tools list (for Task tools)
-            if tool.name == "Task" && !tool.subagentTools.isEmpty {
+            // Subagent tools list (for subagent launcher tools)
+            if tool.isSubagentLauncher && !tool.subagentTools.isEmpty {
                 SubagentToolsList(tools: tool.subagentTools)
                     .padding(.leading, 12)
                     .padding(.top, 2)
@@ -744,7 +755,7 @@ struct ToolCallView: View {
 
             // Result content (Edit always shows, others when expanded)
             // Edit tools bypass hasResult check - fallback in ToolResultContent renders from input params
-            if showContent && tool.status != .running && tool.name != "Task" && (hasResult || tool.name == "Edit") {
+            if showContent && tool.status != .running && !tool.isSubagentLauncher && (hasResult || tool.name == "Edit") {
                 ToolResultContent(tool: tool)
                     .padding(.leading, 12)
                     .padding(.top, 4)
