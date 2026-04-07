@@ -120,14 +120,11 @@ actor ConversationParser {
             let type = json["type"] as? String
             let isMeta = json["isMeta"] as? Bool ?? false
 
-            if type == "user" && !isMeta {
-                if let message = json["message"] as? [String: Any],
-                   let msgContent = message["content"] as? String {
-                    if !msgContent.hasPrefix("<command-name>") && !msgContent.hasPrefix("<local-command") && !msgContent.hasPrefix("Caveat:") {
-                        firstUserMessage = Self.truncateMessage(msgContent, maxLength: 50)
-                        break
-                    }
-                }
+            if type == "user" && !isMeta,
+               let message = json["message"] as? [String: Any],
+               let text = ConversationTextFilter.extractUserText(from: message) {
+                firstUserMessage = Self.truncateMessage(text, maxLength: 50)
+                break
             }
         }
 
@@ -145,7 +142,7 @@ actor ConversationParser {
                     let isMeta = json["isMeta"] as? Bool ?? false
                     if !isMeta, let message = json["message"] as? [String: Any] {
                         if let msgContent = message["content"] as? String {
-                            if !msgContent.hasPrefix("<command-name>") && !msgContent.hasPrefix("<local-command") && !msgContent.hasPrefix("Caveat:") {
+                            if !ConversationTextFilter.isSlashCommandOrMetaText(msgContent) {
                                 lastMessage = msgContent
                                 lastMessageRole = type
                             }
@@ -174,15 +171,12 @@ actor ConversationParser {
 
             if !foundLastUserMessage && type == "user" {
                 let isMeta = json["isMeta"] as? Bool ?? false
-                if !isMeta, let message = json["message"] as? [String: Any] {
-                    if let msgContent = message["content"] as? String {
-                        if !msgContent.hasPrefix("<command-name>") && !msgContent.hasPrefix("<local-command") && !msgContent.hasPrefix("Caveat:") {
-                            if let timestampStr = json["timestamp"] as? String {
-                                lastUserMessageDate = formatter.date(from: timestampStr)
-                            }
-                            foundLastUserMessage = true
-                        }
+                if !isMeta, let message = json["message"] as? [String: Any],
+                   ConversationTextFilter.extractUserText(from: message) != nil {
+                    if let timestampStr = json["timestamp"] as? String {
+                        lastUserMessageDate = formatter.date(from: timestampStr)
                     }
+                    foundLastUserMessage = true
                 }
             }
 

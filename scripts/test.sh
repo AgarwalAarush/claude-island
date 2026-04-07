@@ -22,6 +22,7 @@ declare -a TEST_SOURCES
 TEST_SOURCES=(
     "NotchGeometryTests.swift|ClaudeIsland/Core/NotchGeometry.swift"
     "NotchTunablesTests.swift|ClaudeIsland/Core/NotchTunables.swift"
+    "ConversationTextFilterTests.swift|ClaudeIsland/Services/Session/ConversationTextFilter.swift"
 )
 
 FILTER="${1:-}"
