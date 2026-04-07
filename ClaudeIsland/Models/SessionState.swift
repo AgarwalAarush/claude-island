@@ -77,10 +77,7 @@ struct SessionState: Equatable, Identifiable, Sendable {
         chatItems: [ChatHistoryItem] = [],
         toolTracker: ToolTracker = ToolTracker(),
         subagentState: SubagentState = SubagentState(),
-        conversationInfo: ConversationInfo = ConversationInfo(
-            summary: nil, lastMessage: nil, lastMessageRole: nil,
-            lastToolName: nil, firstUserMessage: nil, lastUserMessageDate: nil
-        ),
+        conversationInfo: ConversationInfo? = nil,
         needsClearReconciliation: Bool = false,
         lastActivity: Date = Date(),
         createdAt: Date = Date()
@@ -96,7 +93,10 @@ struct SessionState: Equatable, Identifiable, Sendable {
         self.chatItems = chatItems
         self.toolTracker = toolTracker
         self.subagentState = subagentState
-        self.conversationInfo = conversationInfo
+        self.conversationInfo = conversationInfo ?? ConversationInfo(
+            summary: nil, lastMessage: nil, lastMessageRole: nil,
+            lastToolName: nil, firstUserMessage: nil, lastUserMessageDate: nil
+        )
         self.needsClearReconciliation = needsClearReconciliation
         self.lastActivity = lastActivity
         self.createdAt = createdAt

@@ -117,7 +117,7 @@ actor SessionStore {
 
     private func processHookEvent(_ event: HookEvent) async {
         let sessionId = event.sessionId
-        let isNewSession = sessions[sessionId] == nil
+        let isNewSession = !sessions.keys.contains(sessionId)
         var session = sessions[sessionId] ?? createSession(from: event)
 
         // Track new session in Mixpanel
@@ -190,7 +190,7 @@ actor SessionStore {
     /// cases where ProcessInfo returns a FQDN but the remote reports a short name.
     private func resolveRemoteHost(_ hostname: String?) -> String? {
         guard let hostname else { return nil }
-        let local = ProcessInfo.processInfo.hostName
+        let local = Foundation.ProcessInfo.processInfo.hostName
         let localShort = local.components(separatedBy: ".").first ?? local
         let remoteShort = hostname.components(separatedBy: ".").first ?? hostname
         return remoteShort.lowercased() != localShort.lowercased() ? hostname : nil
