@@ -173,7 +173,6 @@ class NotchViewModel: ObservableObject {
         if isHovering && (status == .closed || status == .popping) {
             let workItem = DispatchWorkItem { [weak self] in
                 guard let self = self, self.isHovering else { return }
-                NSHapticFeedbackManager.defaultPerformer.perform(.alignment, performanceTime: .now)
                 self.notchOpen(reason: .hover)
             }
             hoverTimer = workItem
@@ -247,8 +246,16 @@ class NotchViewModel: ObservableObject {
     // MARK: - Actions
 
     func notchOpen(reason: NotchOpenReason = .unknown) {
+        let wasClosed = (status != .opened)
         openReason = reason
         status = .opened
+
+        // Fire a subtle haptic whenever the panel actually expands from a user action.
+        // Skip the boot animation (too noisy at launch) and notification-triggered
+        // opens (the app did that automatically, not the user).
+        if wasClosed && reason != .boot && reason != .notification {
+            NSHapticFeedbackManager.defaultPerformer.perform(.alignment, performanceTime: .now)
+        }
 
         // Don't restore chat on notification - show instances list instead
         if reason == .notification {
