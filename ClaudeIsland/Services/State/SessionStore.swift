@@ -207,9 +207,9 @@ actor SessionStore {
                 let isSubagentTool = session.subagentState.hasActiveSubagent && toolName != "Task"
                 let hasActiveSubagent = session.subagentState.hasActiveSubagent
                 let activeTaskCount = session.subagentState.activeTasks.count
-                Self.logger.debug("[SUBAGENT-DEBUG] PreToolUse tool=\(toolName, privacy: .public) id=\(toolUseId.prefix(12), privacy: .public) hasActiveSubagent=\(hasActiveSubagent, privacy: .public) activeTasks=\(activeTaskCount, privacy: .public) isSubagentTool=\(isSubagentTool, privacy: .public)")
+                Self.logger.notice("[SUBAGENT-DEBUG] PreToolUse tool=\(toolName, privacy: .public) id=\(toolUseId.prefix(12), privacy: .public) hasActiveSubagent=\(hasActiveSubagent, privacy: .public) activeTasks=\(activeTaskCount, privacy: .public) isSubagentTool=\(isSubagentTool, privacy: .public)")
                 if isSubagentTool {
-                    Self.logger.debug("[SUBAGENT-DEBUG] SKIPPING top-level placeholder for \(toolName, privacy: .public) (will be populated from agent file)")
+                    Self.logger.notice("[SUBAGENT-DEBUG] SKIPPING top-level placeholder for \(toolName, privacy: .public) (will be populated from agent file)")
                     return
                 }
 
@@ -277,20 +277,20 @@ actor SessionStore {
                 let description = event.toolInput?["description"]?.value as? String
                 session.subagentState.startTask(taskToolId: toolUseId, description: description)
                 let activeTaskCount = session.subagentState.activeTasks.count
-                Self.logger.debug("[SUBAGENT-DEBUG] Started Task subagent tracking: id=\(toolUseId.prefix(12), privacy: .public) desc=\(description ?? "nil", privacy: .public) activeTasks=\(activeTaskCount, privacy: .public)")
+                Self.logger.notice("[SUBAGENT-DEBUG] Started Task subagent tracking: id=\(toolUseId.prefix(12), privacy: .public) desc=\(description ?? "nil", privacy: .public) activeTasks=\(activeTaskCount, privacy: .public)")
             }
 
         case "PostToolUse":
             if event.tool == "Task" {
                 let activeTaskCount = session.subagentState.activeTasks.count
-                Self.logger.debug("[SUBAGENT-DEBUG] PostToolUse for Task received (activeTasks=\(activeTaskCount, privacy: .public))")
+                Self.logger.notice("[SUBAGENT-DEBUG] PostToolUse for Task received (activeTasks=\(activeTaskCount, privacy: .public))")
             }
 
         case "SubagentStop":
             // SubagentStop fires when a subagent completes - stop tracking
             // Subagent tools are populated from agent file in processFileUpdated
             let activeTaskCount = session.subagentState.activeTasks.count
-            Self.logger.debug("[SUBAGENT-DEBUG] SubagentStop received (activeTasks=\(activeTaskCount, privacy: .public))")
+            Self.logger.notice("[SUBAGENT-DEBUG] SubagentStop received (activeTasks=\(activeTaskCount, privacy: .public))")
 
         default:
             break
@@ -669,7 +669,7 @@ actor SessionStore {
         }.count
         let chatItemCount = session.chatItems.count
         let structuredResultCount = structuredResults.count
-        Self.logger.debug("[SUBAGENT-DEBUG] populateSubagentToolsFromAgentFiles: chatItems=\(chatItemCount, privacy: .public) taskTools=\(taskCount, privacy: .public) structuredResults=\(structuredResultCount, privacy: .public)")
+        Self.logger.notice("[SUBAGENT-DEBUG] populateSubagentToolsFromAgentFiles: chatItems=\(chatItemCount, privacy: .public) taskTools=\(taskCount, privacy: .public) structuredResults=\(structuredResultCount, privacy: .public)")
 
         for i in 0..<session.chatItems.count {
             guard case .toolCall(var tool) = session.chatItems[i].type,
@@ -681,7 +681,7 @@ actor SessionStore {
             if let sr = structuredResults[taskToolId], case .task(let tr) = sr {
                 agentIdDebug = tr.agentId.isEmpty ? "empty" : String(tr.agentId.prefix(8))
             }
-            Self.logger.debug("[SUBAGENT-DEBUG] Task \(taskToolId.prefix(12), privacy: .public) hasStructuredResult=\(hasStructured, privacy: .public) agentId=\(agentIdDebug, privacy: .public)")
+            Self.logger.notice("[SUBAGENT-DEBUG] Task \(taskToolId.prefix(12), privacy: .public) hasStructuredResult=\(hasStructured, privacy: .public) agentId=\(agentIdDebug, privacy: .public)")
 
             guard let structuredResult = structuredResults[taskToolId],
                   case .task(let taskResult) = structuredResult,
