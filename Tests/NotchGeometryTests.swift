@@ -51,6 +51,44 @@ struct NotchGeometryTests {
             )
         }
 
+        test("openedScreenRect dimensions exactly match the requested panel size") {
+            // Regression: an older revision shrunk the rect by (-6, -30), leaving
+            // the leftmost 6pt and bottom 30pt of the visible panel outside the
+            // hover rect. That made cursors moving inside the visible bounds fire
+            // the auto-close timer mid-interaction.
+            let size = CGSize(width: 480, height: 320)
+            let r = geometry.openedScreenRect(for: size)
+            assertEqual(r.width, size.width, "rect width matches requested panel width")
+            assertEqual(r.height, size.height, "rect height matches requested panel height")
+            // Left edge should sit `rightInset + width` from the screen's right edge
+            assertEqual(
+                r.minX,
+                screenRect.maxX - NotchGeometry.rightInset - size.width,
+                "left edge is `rightInset + width` from screen right"
+            )
+            // Bottom edge should sit `menuBarHeight + topInset + height` from the screen top
+            assertEqual(
+                r.minY,
+                screenRect.maxY - menuBarHeight - NotchGeometry.topInset - size.height,
+                "bottom edge is `menuBarHeight + topInset + height` from screen top"
+            )
+        }
+
+        test("isPointInOpenedPanel covers the full visible panel including bottom-left corner") {
+            // Regression for the same bug: the bottom-left corner of the visible
+            // panel must be inside the hover rect, otherwise hovering it triggers
+            // the close timer.
+            let size = CGSize(width: 480, height: 320)
+            let r = geometry.openedScreenRect(for: size)
+            // Sample points just inside each edge of the visible panel
+            let nearLeftEdge = CGPoint(x: r.minX + 1, y: r.midY)
+            let nearBottomEdge = CGPoint(x: r.midX, y: r.minY + 1)
+            let bottomLeftCorner = CGPoint(x: r.minX + 1, y: r.minY + 1)
+            assertTrue(geometry.isPointInOpenedPanel(nearLeftEdge, size: size), "1pt right of left edge is inside")
+            assertTrue(geometry.isPointInOpenedPanel(nearBottomEdge, size: size), "1pt above bottom edge is inside")
+            assertTrue(geometry.isPointInOpenedPanel(bottomLeftCorner, size: size), "bottom-left corner is inside")
+        }
+
         test("openedScreenRect grows leftward and downward as size increases") {
             let small = geometry.openedScreenRect(for: CGSize(width: 480, height: 320))
             let large = geometry.openedScreenRect(for: CGSize(width: 600, height: 580))
@@ -72,13 +110,16 @@ struct NotchGeometryTests {
             assertTrue(!geometry.isPointInNotch(outsideLeft), "11pt left of indicator is outside hover area")
         }
 
-        test("isPointInOpenedPanel matches openedScreenRect bounds") {
+        test("isPointInOpenedPanel matches openedScreenRect bounds with a small grace inset") {
             let size = CGSize(width: 480, height: 320)
             let panelRect = geometry.openedScreenRect(for: size)
             let inside = CGPoint(x: panelRect.midX, y: panelRect.midY)
-            let outside = CGPoint(x: panelRect.minX - 1, y: panelRect.midY)
+            // 4pt grace inset means 3pt outside is still inside, but 5pt outside is not
+            let nearOutside = CGPoint(x: panelRect.minX - 3, y: panelRect.midY)
+            let farOutside = CGPoint(x: panelRect.minX - 5, y: panelRect.midY)
             assertTrue(geometry.isPointInOpenedPanel(inside, size: size), "midpoint is inside")
-            assertTrue(!geometry.isPointInOpenedPanel(outside, size: size), "1pt left of panel is outside")
+            assertTrue(geometry.isPointInOpenedPanel(nearOutside, size: size), "3pt left of panel is inside grace")
+            assertTrue(!geometry.isPointInOpenedPanel(farOutside, size: size), "5pt left of panel is outside grace")
         }
 
         test("topInset and rightInset constants are 8pt") {

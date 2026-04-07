@@ -39,15 +39,20 @@ struct NotchGeometry: Sendable {
 
     /// The opened panel rect in screen coordinates for a given size, anchored top-right.
     /// Used by most modes; `panelScreenRect(for:anchor:)` is the preferred entry point.
+    ///
+    /// The rect matches the actual rendered panel: NotchView constrains the opened
+    /// panel to `notchSize.width × notchSize.height` and anchors it via
+    /// `.padding(.top, menuBarHeight + topInset) .padding(.trailing, rightInset)`.
+    /// An older revision of this method shrunk the rect by (-6, -30); that left a
+    /// 6pt strip on the left and a 30pt strip on the bottom of the visible panel
+    /// outside the hover rect, so hovering those bands fired the auto-close timer
+    /// and collapsed the panel mid-interaction.
     func openedScreenRect(for size: CGSize) -> CGRect {
-        // Match the actual rendered panel size (tuned to match visual output)
-        let width = size.width - 6
-        let height = size.height - 30
-        return CGRect(
-            x: screenRect.maxX - width - Self.rightInset,
-            y: screenRect.maxY - menuBarHeight - Self.topInset - height,
-            width: width,
-            height: height
+        CGRect(
+            x: screenRect.maxX - size.width - Self.rightInset,
+            y: screenRect.maxY - menuBarHeight - Self.topInset - size.height,
+            width: size.width,
+            height: size.height
         )
     }
 
@@ -75,9 +80,11 @@ struct NotchGeometry: Sendable {
         notchScreenRect.insetBy(dx: -10, dy: -5).contains(point)
     }
 
-    /// Check if a point is in the opened panel area (top-right anchored — legacy helper)
+    /// Check if a point is in the opened panel area (top-right anchored — legacy helper).
+    /// Includes a small grace inset so floating-point cursor jitter at the panel edge
+    /// doesn't briefly flip hover state and trigger the mouse-leave close timer.
     func isPointInOpenedPanel(_ point: CGPoint, size: CGSize) -> Bool {
-        openedScreenRect(for: size).contains(point)
+        openedScreenRect(for: size).insetBy(dx: -4, dy: -4).contains(point)
     }
 
     /// Check if a point is outside the opened panel (top-right anchored — legacy helper)
