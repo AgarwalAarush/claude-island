@@ -205,7 +205,9 @@ actor SessionStore {
                 // Skip creating top-level placeholder for subagent tools
                 // They'll appear under their parent Task instead
                 let isSubagentTool = session.subagentState.hasActiveSubagent && toolName != "Task"
-                Self.logger.debug("[SUBAGENT-DEBUG] PreToolUse tool=\(toolName, privacy: .public) id=\(toolUseId.prefix(12), privacy: .public) hasActiveSubagent=\(session.subagentState.hasActiveSubagent, privacy: .public) activeTasks=\(session.subagentState.activeTasks.count, privacy: .public) isSubagentTool=\(isSubagentTool, privacy: .public)")
+                let hasActiveSubagent = session.subagentState.hasActiveSubagent
+                let activeTaskCount = session.subagentState.activeTasks.count
+                Self.logger.debug("[SUBAGENT-DEBUG] PreToolUse tool=\(toolName, privacy: .public) id=\(toolUseId.prefix(12), privacy: .public) hasActiveSubagent=\(hasActiveSubagent, privacy: .public) activeTasks=\(activeTaskCount, privacy: .public) isSubagentTool=\(isSubagentTool, privacy: .public)")
                 if isSubagentTool {
                     Self.logger.debug("[SUBAGENT-DEBUG] SKIPPING top-level placeholder for \(toolName, privacy: .public) (will be populated from agent file)")
                     return
@@ -274,18 +276,21 @@ actor SessionStore {
             if event.tool == "Task", let toolUseId = event.toolUseId {
                 let description = event.toolInput?["description"]?.value as? String
                 session.subagentState.startTask(taskToolId: toolUseId, description: description)
-                Self.logger.debug("[SUBAGENT-DEBUG] Started Task subagent tracking: id=\(toolUseId.prefix(12), privacy: .public) desc=\(description ?? "nil", privacy: .public) activeTasks=\(session.subagentState.activeTasks.count, privacy: .public)")
+                let activeTaskCount = session.subagentState.activeTasks.count
+                Self.logger.debug("[SUBAGENT-DEBUG] Started Task subagent tracking: id=\(toolUseId.prefix(12), privacy: .public) desc=\(description ?? "nil", privacy: .public) activeTasks=\(activeTaskCount, privacy: .public)")
             }
 
         case "PostToolUse":
             if event.tool == "Task" {
-                Self.logger.debug("[SUBAGENT-DEBUG] PostToolUse for Task received (activeTasks=\(session.subagentState.activeTasks.count, privacy: .public))")
+                let activeTaskCount = session.subagentState.activeTasks.count
+                Self.logger.debug("[SUBAGENT-DEBUG] PostToolUse for Task received (activeTasks=\(activeTaskCount, privacy: .public))")
             }
 
         case "SubagentStop":
             // SubagentStop fires when a subagent completes - stop tracking
             // Subagent tools are populated from agent file in processFileUpdated
-            Self.logger.debug("[SUBAGENT-DEBUG] SubagentStop received (activeTasks=\(session.subagentState.activeTasks.count, privacy: .public))")
+            let activeTaskCount = session.subagentState.activeTasks.count
+            Self.logger.debug("[SUBAGENT-DEBUG] SubagentStop received (activeTasks=\(activeTaskCount, privacy: .public))")
 
         default:
             break
@@ -662,7 +667,9 @@ actor SessionStore {
             if case .toolCall(let t) = $0.type { return t.name == "Task" }
             return false
         }.count
-        Self.logger.debug("[SUBAGENT-DEBUG] populateSubagentToolsFromAgentFiles: chatItems=\(session.chatItems.count, privacy: .public) taskTools=\(taskCount, privacy: .public) structuredResults=\(structuredResults.count, privacy: .public)")
+        let chatItemCount = session.chatItems.count
+        let structuredResultCount = structuredResults.count
+        Self.logger.debug("[SUBAGENT-DEBUG] populateSubagentToolsFromAgentFiles: chatItems=\(chatItemCount, privacy: .public) taskTools=\(taskCount, privacy: .public) structuredResults=\(structuredResultCount, privacy: .public)")
 
         for i in 0..<session.chatItems.count {
             guard case .toolCall(var tool) = session.chatItems[i].type,
