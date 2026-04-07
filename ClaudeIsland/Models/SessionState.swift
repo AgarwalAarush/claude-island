@@ -127,6 +127,25 @@ struct SessionState: Equatable, Identifiable, Sendable {
         return sessionId
     }
 
+    /// The cwd to use when computing the LOCAL JSONL transcript path.
+    ///
+    /// For local sessions this is identical to `cwd` and the parser reads the
+    /// real file at `~/.claude/projects/<encoded-cwd>/<sessionId>.jsonl`.
+    ///
+    /// For remote (SSH) sessions the actual JSONL lives on the remote machine
+    /// and never reaches the Mac directly. The hook script tails it and ships
+    /// new bytes back over the existing socket; the Mac side mirrors them into
+    /// a host-namespaced directory under `~/.claude/projects/` so transcripts
+    /// from different machines can't collide. Both `RemoteTranscriptMirror`
+    /// and every `ConversationParser` call site for this session must use this
+    /// computed cwd, not the raw `cwd`, or the mirror file and the file the
+    /// parser reads will fall out of sync.
+    var transcriptCwd: String {
+        guard let host = remoteHost else { return cwd }
+        let hostKey = host.components(separatedBy: ".").first ?? host
+        return "/remote-\(hostKey)\(cwd)"
+    }
+
     /// Display title, preferring Claude Code's own /resume title from
     /// ~/.claude/sessions/<pid>.json (.name), then falling back through
     /// summary → first real user message → project directory name.

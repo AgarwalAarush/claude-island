@@ -517,8 +517,10 @@ actor ConversationParser {
         return true
     }
 
-    /// Build session file path
-    private static func sessionFilePath(sessionId: String, cwd: String) -> String {
+    /// Build session file path. Public so `RemoteTranscriptMirror` can use the
+    /// exact same encoding the parser reads from — both must agree on where the
+    /// JSONL lives or the mirror writes will land in the wrong place.
+    static func sessionFilePath(sessionId: String, cwd: String) -> String {
         let projectDir = cwd.replacingOccurrences(of: "/", with: "-").replacingOccurrences(of: ".", with: "-")
         return NSHomeDirectory() + "/.claude/projects/" + projectDir + "/" + sessionId + ".jsonl"
     }

@@ -27,6 +27,18 @@ struct HookEvent: Codable, Sendable {
     let message: String?
     let hostname: String?
 
+    /// Base64-encoded JSONL bytes from the remote host for this session.
+    /// Set by the hook script when running on a remote machine — the local app
+    /// writes these to a host-namespaced mirror file so the existing parser
+    /// pipeline can read them. nil for local sessions and for events where no
+    /// new bytes were available.
+    let jsonlChunk: String?
+
+    /// Byte offset in the source JSONL where `jsonlChunk` begins. Offset 0 means
+    /// "rewrite the mirror from scratch" (used on first sync and after `/clear`
+    /// truncation). Any non-zero value means "append to existing mirror".
+    let jsonlOffset: Int?
+
     enum CodingKeys: String, CodingKey {
         case sessionId = "session_id"
         case cwd, event, status, pid, tty, tool
@@ -35,10 +47,12 @@ struct HookEvent: Codable, Sendable {
         case notificationType = "notification_type"
         case message
         case hostname
+        case jsonlChunk = "jsonl_chunk"
+        case jsonlOffset = "jsonl_offset"
     }
 
     /// Create a copy with updated toolUseId
-    init(sessionId: String, cwd: String, event: String, status: String, pid: Int?, tty: String?, tool: String?, toolInput: [String: AnyCodable]?, toolUseId: String?, notificationType: String?, message: String?, hostname: String? = nil) {
+    init(sessionId: String, cwd: String, event: String, status: String, pid: Int?, tty: String?, tool: String?, toolInput: [String: AnyCodable]?, toolUseId: String?, notificationType: String?, message: String?, hostname: String? = nil, jsonlChunk: String? = nil, jsonlOffset: Int? = nil) {
         self.sessionId = sessionId
         self.cwd = cwd
         self.event = event
@@ -51,6 +65,8 @@ struct HookEvent: Codable, Sendable {
         self.notificationType = notificationType
         self.message = message
         self.hostname = hostname
+        self.jsonlChunk = jsonlChunk
+        self.jsonlOffset = jsonlOffset
     }
 
     var sessionPhase: SessionPhase {

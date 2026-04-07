@@ -166,8 +166,25 @@ actor SessionStore {
         sessions[sessionId] = session
         publishState()
 
+        // Mirror any JSONL bytes the hook script forwarded from a remote host
+        // BEFORE scheduling the parser sync — the parser reads from the mirror
+        // file path so it must already contain the new bytes when sync runs.
+        if let chunk = event.jsonlChunk, session.remoteHost != nil {
+            let offset = event.jsonlOffset ?? 0
+            do {
+                try RemoteTranscriptMirror.write(
+                    sessionId: sessionId,
+                    transcriptCwd: session.transcriptCwd,
+                    chunkBase64: chunk,
+                    offset: offset
+                )
+            } catch {
+                Self.logger.error("Failed to write JSONL mirror chunk: \(String(describing: error), privacy: .public)")
+            }
+        }
+
         if event.shouldSyncFile {
-            scheduleFileSync(sessionId: sessionId, cwd: event.cwd)
+            scheduleFileSync(sessionId: sessionId, cwd: session.transcriptCwd)
         }
     }
 
@@ -508,9 +525,10 @@ actor SessionStore {
         guard var session = sessions[payload.sessionId] else { return }
 
         // Update conversationInfo from JSONL (summary, lastMessage, etc.)
+        // Use transcriptCwd so remote sessions read from the mirror file.
         let conversationInfo = await ConversationParser.shared.parse(
             sessionId: payload.sessionId,
-            cwd: session.cwd
+            cwd: session.transcriptCwd
         )
         session.conversationInfo = conversationInfo
 
@@ -1013,10 +1031,17 @@ actor SessionStore {
     // MARK: - History Loading
 
     private func loadHistoryFromFile(sessionId: String, cwd: String) async {
+        // For remote sessions the parser must read the host-namespaced mirror,
+        // not the literal remote cwd. Prefer the session's own transcriptCwd
+        // if we already have a session record; fall back to the caller's cwd
+        // when we don't (only happens before the first hook event arrives,
+        // in which case the session is local anyway).
+        let parserCwd = sessions[sessionId]?.transcriptCwd ?? cwd
+
         // Parse file asynchronously
         let messages = await ConversationParser.shared.parseFullConversation(
             sessionId: sessionId,
-            cwd: cwd
+            cwd: parserCwd
         )
         let completedTools = await ConversationParser.shared.completedToolIds(for: sessionId)
         let toolResults = await ConversationParser.shared.toolResults(for: sessionId)
@@ -1025,7 +1050,7 @@ actor SessionStore {
         // Also parse conversationInfo (summary, lastMessage, etc.)
         let conversationInfo = await ConversationParser.shared.parse(
             sessionId: sessionId,
-            cwd: cwd
+            cwd: parserCwd
         )
 
         // Process loaded history
