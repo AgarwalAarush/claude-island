@@ -134,8 +134,8 @@ struct NotchView: View {
     }
 
     // Animation springs
-    private let openAnimation = Animation.spring(response: 0.42, dampingFraction: 0.8, blendDuration: 0)
-    private let closeAnimation = Animation.spring(response: 0.45, dampingFraction: 1.0, blendDuration: 0)
+    private let openAnimation = Animation.spring(response: 0.25, dampingFraction: 0.8, blendDuration: 0)
+    private let closeAnimation = Animation.spring(response: 0.25, dampingFraction: 1.0, blendDuration: 0)
 
     // MARK: - Body
 

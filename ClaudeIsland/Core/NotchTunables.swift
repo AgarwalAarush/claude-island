@@ -15,5 +15,5 @@ enum NotchTunables {
 
     /// Grace period between mouse leaving the opened panel and auto-collapse.
     /// Avoids immediate close on accidental cursor flicks across the edge.
-    static let mouseLeaveCloseDelay: TimeInterval = 0.4
+    static let mouseLeaveCloseDelay: TimeInterval = 0.15
 }
