@@ -26,6 +26,7 @@ struct NotchView: View {
     @State private var isVisible: Bool = true
     @State private var isHovering: Bool = false
     @State private var isBouncing: Bool = false
+    @State private var isMenuButtonHovered: Bool = false
 
     @Namespace private var activityNamespace
 
@@ -133,8 +134,8 @@ struct NotchView: View {
     }
 
     // Animation springs
-    private let openAnimation = Animation.spring(response: 0.42, dampingFraction: 0.8, blendDuration: 0)
-    private let closeAnimation = Animation.spring(response: 0.45, dampingFraction: 1.0, blendDuration: 0)
+    private let openAnimation = Animation.spring(response: 0.25, dampingFraction: 0.8, blendDuration: 0)
+    private let closeAnimation = Animation.spring(response: 0.25, dampingFraction: 1.0, blendDuration: 0)
 
     // MARK: - Body
 
@@ -331,8 +332,12 @@ struct NotchView: View {
                 ZStack(alignment: .topTrailing) {
                     Image(systemName: viewModel.contentType == .menu ? "xmark" : "line.3.horizontal")
                         .font(.system(size: 11, weight: .medium))
-                        .foregroundColor(.white)
+                        .foregroundColor(isMenuButtonHovered ? .white.opacity(0.8) : .white.opacity(0.4))
                         .frame(width: 22, height: 22)
+                        .background(
+                            RoundedRectangle(cornerRadius: 6)
+                                .fill(isMenuButtonHovered ? Color.white.opacity(0.1) : Color.clear)
+                        )
                         .contentShape(Rectangle())
 
                     // Green dot for unseen update
@@ -345,6 +350,7 @@ struct NotchView: View {
                 }
             }
             .buttonStyle(.plain)
+            .onHover { isMenuButtonHovered = $0 }
         }
     }
 
