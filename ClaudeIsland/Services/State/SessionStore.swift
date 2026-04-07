@@ -205,7 +205,9 @@ actor SessionStore {
                 // Skip creating top-level placeholder for subagent tools
                 // They'll appear under their parent Task instead
                 let isSubagentTool = session.subagentState.hasActiveSubagent && toolName != "Task"
+                Self.logger.debug("[SUBAGENT-DEBUG] PreToolUse tool=\(toolName, privacy: .public) id=\(toolUseId.prefix(12), privacy: .public) hasActiveSubagent=\(session.subagentState.hasActiveSubagent, privacy: .public) activeTasks=\(session.subagentState.activeTasks.count, privacy: .public) isSubagentTool=\(isSubagentTool, privacy: .public)")
                 if isSubagentTool {
+                    Self.logger.debug("[SUBAGENT-DEBUG] SKIPPING top-level placeholder for \(toolName, privacy: .public) (will be populated from agent file)")
                     return
                 }
 
@@ -272,18 +274,18 @@ actor SessionStore {
             if event.tool == "Task", let toolUseId = event.toolUseId {
                 let description = event.toolInput?["description"]?.value as? String
                 session.subagentState.startTask(taskToolId: toolUseId, description: description)
-                Self.logger.debug("Started Task subagent tracking: \(toolUseId.prefix(12), privacy: .public)")
+                Self.logger.debug("[SUBAGENT-DEBUG] Started Task subagent tracking: id=\(toolUseId.prefix(12), privacy: .public) desc=\(description ?? "nil", privacy: .public) activeTasks=\(session.subagentState.activeTasks.count, privacy: .public)")
             }
 
         case "PostToolUse":
             if event.tool == "Task" {
-                Self.logger.debug("PostToolUse for Task received (subagent still running)")
+                Self.logger.debug("[SUBAGENT-DEBUG] PostToolUse for Task received (activeTasks=\(session.subagentState.activeTasks.count, privacy: .public))")
             }
 
         case "SubagentStop":
             // SubagentStop fires when a subagent completes - stop tracking
             // Subagent tools are populated from agent file in processFileUpdated
-            Self.logger.debug("SubagentStop received")
+            Self.logger.debug("[SUBAGENT-DEBUG] SubagentStop received (activeTasks=\(session.subagentState.activeTasks.count, privacy: .public))")
 
         default:
             break
@@ -656,14 +658,27 @@ actor SessionStore {
         cwd: String,
         structuredResults: [String: ToolResultData]
     ) async {
+        let taskCount = session.chatItems.filter {
+            if case .toolCall(let t) = $0.type { return t.name == "Task" }
+            return false
+        }.count
+        Self.logger.debug("[SUBAGENT-DEBUG] populateSubagentToolsFromAgentFiles: chatItems=\(session.chatItems.count, privacy: .public) taskTools=\(taskCount, privacy: .public) structuredResults=\(structuredResults.count, privacy: .public)")
+
         for i in 0..<session.chatItems.count {
             guard case .toolCall(var tool) = session.chatItems[i].type,
-                  tool.name == "Task",
-                  let structuredResult = structuredResults[session.chatItems[i].id],
-                  case .task(let taskResult) = structuredResult,
-                  !taskResult.agentId.isEmpty else { continue }
+                  tool.name == "Task" else { continue }
 
             let taskToolId = session.chatItems[i].id
+            let hasStructured = structuredResults[taskToolId] != nil
+            var agentIdDebug = "none"
+            if let sr = structuredResults[taskToolId], case .task(let tr) = sr {
+                agentIdDebug = tr.agentId.isEmpty ? "empty" : String(tr.agentId.prefix(8))
+            }
+            Self.logger.debug("[SUBAGENT-DEBUG] Task \(taskToolId.prefix(12), privacy: .public) hasStructuredResult=\(hasStructured, privacy: .public) agentId=\(agentIdDebug, privacy: .public)")
+
+            guard let structuredResult = structuredResults[taskToolId],
+                  case .task(let taskResult) = structuredResult,
+                  !taskResult.agentId.isEmpty else { continue }
 
             // Store agentId → description mapping for AgentOutputTool display
             if let description = session.subagentState.activeTasks[taskToolId]?.description {
