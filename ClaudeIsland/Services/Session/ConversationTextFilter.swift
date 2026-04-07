@@ -20,7 +20,7 @@ enum ConversationTextFilter {
     ///     <command-message>init</command-message>\n<command-name>/init</command-name>
     /// The `<command-` prefix check catches every `<command-*>` variant
     /// (command-message, command-name, command-args, …) in one shot.
-    static func isSlashCommandOrMetaText(_ text: String) -> Bool {
+    nonisolated static func isSlashCommandOrMetaText(_ text: String) -> Bool {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         return trimmed.hasPrefix("<command-")
             || trimmed.hasPrefix("<local-command")
@@ -32,7 +32,7 @@ enum ConversationTextFilter {
     /// content-block array form (which is how Claude Code emits expanded
     /// slash-command prompts). Returns nil if every candidate is filtered
     /// out by `isSlashCommandOrMetaText`.
-    static func extractUserText(from message: [String: Any]) -> String? {
+    nonisolated static func extractUserText(from message: [String: Any]) -> String? {
         if let str = message["content"] as? String {
             return isSlashCommandOrMetaText(str) ? nil : str
         }
@@ -59,7 +59,7 @@ enum ConversationTextFilter {
     /// tags. Tool results have `message.content` as an **array** of
     /// content blocks, so excluding the array form drops the whole class
     /// of false positives in one check.
-    static func isClearCommandLine(_ line: String) -> Bool {
+    nonisolated static func isClearCommandLine(_ line: String) -> Bool {
         // Fast reject: if the literal pattern isn't on this line, it's not a /clear.
         guard line.contains("<command-name>/clear</command-name>") else {
             return false

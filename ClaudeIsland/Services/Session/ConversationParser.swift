@@ -20,7 +20,7 @@ struct ConversationInfo: Equatable {
     let totalInputTokens: Int   // sum of input_tokens across all assistant messages
     let totalOutputTokens: Int  // sum of output_tokens across all assistant messages
 
-    init(
+    nonisolated init(
         summary: String?,
         lastMessage: String?,
         lastMessageRole: String?,
@@ -44,7 +44,7 @@ struct ConversationInfo: Equatable {
 
     /// Return a copy with `sessionName` replaced — used so we can refresh the
     /// name field even when the rest of the conversation info is cache-hit.
-    func withSessionName(_ name: String?) -> ConversationInfo {
+    nonisolated func withSessionName(_ name: String?) -> ConversationInfo {
         ConversationInfo(
             summary: summary,
             lastMessage: lastMessage,

@@ -30,7 +30,7 @@ struct SessionMetadata: Equatable {
 
 enum SessionMetadataReader {
     /// Default directory where Claude Code writes session metadata.
-    static var defaultDirectory: URL {
+    nonisolated static var defaultDirectory: URL {
         FileManager.default.homeDirectoryForCurrentUser
             .appendingPathComponent(".claude/sessions")
     }
@@ -38,13 +38,13 @@ enum SessionMetadataReader {
     /// Find the `name` for a given sessionId by scanning a directory of
     /// `<pid>.json` files. Returns nil if the directory is missing, no file
     /// matches, or the matching file has no `name` set yet.
-    static func findName(for sessionId: String, in directory: URL = defaultDirectory) -> String? {
+    nonisolated static func findName(for sessionId: String, in directory: URL = defaultDirectory) -> String? {
         findMetadata(for: sessionId, in: directory)?.name
     }
 
     /// Find the full metadata record for a given sessionId. Exposed separately
     /// so callers that want pid/cwd/etc. don't need a second pass.
-    static func findMetadata(for sessionId: String, in directory: URL = defaultDirectory) -> SessionMetadata? {
+    nonisolated static func findMetadata(for sessionId: String, in directory: URL = defaultDirectory) -> SessionMetadata? {
         let fm = FileManager.default
         guard let entries = try? fm.contentsOfDirectory(
             at: directory,
@@ -66,7 +66,7 @@ enum SessionMetadataReader {
 
     /// Decode a single metadata file's bytes. Returns nil on malformed JSON
     /// or missing required fields (`pid`, `sessionId`). `name` is optional.
-    static func decode(_ data: Data) -> SessionMetadata? {
+    nonisolated static func decode(_ data: Data) -> SessionMetadata? {
         guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
               let pid = json["pid"] as? Int,
               let sessionId = json["sessionId"] as? String else {
