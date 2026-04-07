@@ -23,6 +23,7 @@ TEST_SOURCES=(
     "NotchGeometryTests.swift|ClaudeIsland/Core/NotchGeometry.swift"
     "NotchTunablesTests.swift|ClaudeIsland/Core/NotchTunables.swift"
     "ConversationTextFilterTests.swift|ClaudeIsland/Services/Session/ConversationTextFilter.swift"
+    "SessionMetadataReaderTests.swift|ClaudeIsland/Services/Session/SessionMetadataReader.swift"
 )
 
 FILTER="${1:-}"

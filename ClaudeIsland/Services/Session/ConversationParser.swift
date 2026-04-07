@@ -16,6 +16,39 @@ struct ConversationInfo: Equatable {
     let lastToolName: String?  // Tool name if lastMessageRole is "tool"
     let firstUserMessage: String?  // Fallback title when no summary
     let lastUserMessageDate: Date?  // Timestamp of last user message (for stable sorting)
+    let sessionName: String?  // Claude Code's /resume title from ~/.claude/sessions/<pid>.json
+
+    init(
+        summary: String?,
+        lastMessage: String?,
+        lastMessageRole: String?,
+        lastToolName: String?,
+        firstUserMessage: String?,
+        lastUserMessageDate: Date?,
+        sessionName: String? = nil
+    ) {
+        self.summary = summary
+        self.lastMessage = lastMessage
+        self.lastMessageRole = lastMessageRole
+        self.lastToolName = lastToolName
+        self.firstUserMessage = firstUserMessage
+        self.lastUserMessageDate = lastUserMessageDate
+        self.sessionName = sessionName
+    }
+
+    /// Return a copy with `sessionName` replaced — used so we can refresh the
+    /// name field even when the rest of the conversation info is cache-hit.
+    func withSessionName(_ name: String?) -> ConversationInfo {
+        ConversationInfo(
+            summary: summary,
+            lastMessage: lastMessage,
+            lastMessageRole: lastMessageRole,
+            lastToolName: lastToolName,
+            firstUserMessage: firstUserMessage,
+            lastUserMessageDate: lastUserMessageDate,
+            sessionName: name
+        )
+    }
 }
 
 actor ConversationParser {
@@ -75,23 +108,29 @@ actor ConversationParser {
         let projectDir = cwd.replacingOccurrences(of: "/", with: "-").replacingOccurrences(of: ".", with: "-")
         let sessionFile = NSHomeDirectory() + "/.claude/projects/" + projectDir + "/" + sessionId + ".jsonl"
 
+        // Session name from ~/.claude/sessions/<pid>.json — always read fresh
+        // (the file is tiny and Claude Code may set/update the name at any
+        // point after the session starts).
+        let sessionName = SessionMetadataReader.findName(for: sessionId)
+
         let fileManager = FileManager.default
         guard fileManager.fileExists(atPath: sessionFile),
               let attrs = try? fileManager.attributesOfItem(atPath: sessionFile),
               let modDate = attrs[.modificationDate] as? Date else {
-            return ConversationInfo(summary: nil, lastMessage: nil, lastMessageRole: nil, lastToolName: nil, firstUserMessage: nil, lastUserMessageDate: nil)
+            return ConversationInfo(summary: nil, lastMessage: nil, lastMessageRole: nil, lastToolName: nil, firstUserMessage: nil, lastUserMessageDate: nil, sessionName: sessionName)
         }
 
         if let cached = cache[sessionFile], cached.modificationDate == modDate {
-            return cached.info
+            // JSONL hasn't changed, but the session name may have — re-wrap.
+            return cached.info.withSessionName(sessionName)
         }
 
         guard let data = fileManager.contents(atPath: sessionFile),
               let content = String(data: data, encoding: .utf8) else {
-            return ConversationInfo(summary: nil, lastMessage: nil, lastMessageRole: nil, lastToolName: nil, firstUserMessage: nil, lastUserMessageDate: nil)
+            return ConversationInfo(summary: nil, lastMessage: nil, lastMessageRole: nil, lastToolName: nil, firstUserMessage: nil, lastUserMessageDate: nil, sessionName: sessionName)
         }
 
-        let info = parseContent(content)
+        let info = parseContent(content).withSessionName(sessionName)
         cache[sessionFile] = CachedInfo(modificationDate: modDate, info: info)
 
         return info

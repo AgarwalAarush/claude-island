@@ -124,9 +124,20 @@ struct SessionState: Equatable, Identifiable, Sendable {
         return sessionId
     }
 
-    /// Display title: summary > first user message > project name
+    /// Display title, preferring Claude Code's own /resume title from
+    /// ~/.claude/sessions/<pid>.json (.name), then falling back through
+    /// summary → first real user message → project directory name.
     var displayTitle: String {
-        conversationInfo.summary ?? conversationInfo.firstUserMessage ?? projectName
+        conversationInfo.sessionName
+            ?? conversationInfo.summary
+            ?? conversationInfo.firstUserMessage
+            ?? projectName
+    }
+
+    /// Best hint for matching a window title — prefers the /resume session
+    /// name since that's what the user is most likely to recognize.
+    var sessionName: String? {
+        conversationInfo.sessionName
     }
 
     /// Best hint for matching window title
