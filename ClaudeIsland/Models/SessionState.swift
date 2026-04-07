@@ -172,6 +172,30 @@ struct SessionState: Equatable, Identifiable, Sendable {
         return plan
     }
 
+    /// Raw pending-permission tool input as a plain `[String: String]` dict so views
+    /// can pull individual fields (e.g. Bash's `command` + `description`) without
+    /// going through the lossy generic `formattedInput` flattening + 100-char clamp.
+    /// Returns nil when there's no pending permission or no input.
+    var pendingToolInputFields: [String: String]? {
+        guard let perm = activePermission, let input = perm.toolInput else { return nil }
+        var out: [String: String] = [:]
+        for (key, value) in input {
+            switch value.value {
+            case let s as String:
+                out[key] = s
+            case let i as Int:
+                out[key] = String(i)
+            case let d as Double:
+                out[key] = String(d)
+            case let b as Bool:
+                out[key] = b ? "true" : "false"
+            default:
+                continue
+            }
+        }
+        return out.isEmpty ? nil : out
+    }
+
     /// Last message content
     var lastMessage: String? {
         conversationInfo.lastMessage

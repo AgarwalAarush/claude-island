@@ -411,7 +411,7 @@ struct ChatView: View {
     private func approvalBar(tool: String) -> some View {
         ChatApprovalBar(
             tool: tool,
-            toolInput: session.pendingToolInput,
+            toolInputFields: session.pendingToolInputFields ?? [:],
             onApprove: { approvePermission() },
             onDeny: { denyPermission() }
         )
@@ -1048,7 +1048,7 @@ struct ChatInteractivePromptBar: View {
 /// Approval bar for the chat view with animated buttons
 struct ChatApprovalBar: View {
     let tool: String
-    let toolInput: String?
+    let toolInputFields: [String: String]
     let onApprove: () -> Void
     let onDeny: () -> Void
 
@@ -1057,57 +1057,57 @@ struct ChatApprovalBar: View {
     @State private var showDenyButton = false
 
     var body: some View {
-        HStack(spacing: 12) {
-            // Tool info
-            VStack(alignment: .leading, spacing: 2) {
+        // Top-aligned so the buttons stay anchored where the user expects to click
+        // while the body grows downward as a long Bash command wraps over multiple lines.
+        HStack(alignment: .top, spacing: 12) {
+            VStack(alignment: .leading, spacing: 4) {
                 Text(MCPToolFormatter.formatToolName(tool))
                     .font(.system(size: 12, weight: .medium, design: .monospaced))
                     .foregroundColor(TerminalColors.amber)
-                if let input = toolInput {
-                    Text(input)
-                        .font(.system(size: 11))
-                        .foregroundColor(.white.opacity(0.5))
-                        .lineLimit(1)
-                }
+
+                approvalBody
             }
             .opacity(showContent ? 1 : 0)
             .offset(x: showContent ? 0 : -10)
 
-            Spacer()
+            Spacer(minLength: 8)
 
-            // Deny button
-            Button {
-                onDeny()
-            } label: {
-                Text("Deny")
-                    .font(.system(size: 13, weight: .medium))
-                    .foregroundColor(.white.opacity(0.7))
-                    .padding(.horizontal, 16)
-                    .padding(.vertical, 8)
-                    .background(Color.white.opacity(0.1))
-                    .clipShape(Capsule())
-            }
-            .buttonStyle(.plain)
-            .opacity(showDenyButton ? 1 : 0)
-            .scaleEffect(showDenyButton ? 1 : 0.8)
+            // Buttons stay top-anchored alongside the (possibly tall) body.
+            VStack(spacing: 6) {
+                // Deny button
+                Button {
+                    onDeny()
+                } label: {
+                    Text("Deny")
+                        .font(.system(size: 13, weight: .medium))
+                        .foregroundColor(.white.opacity(0.7))
+                        .padding(.horizontal, 16)
+                        .padding(.vertical, 8)
+                        .background(Color.white.opacity(0.1))
+                        .clipShape(Capsule())
+                }
+                .buttonStyle(.plain)
+                .opacity(showDenyButton ? 1 : 0)
+                .scaleEffect(showDenyButton ? 1 : 0.8)
 
-            // Allow button
-            Button {
-                onApprove()
-            } label: {
-                Text("Allow")
-                    .font(.system(size: 13, weight: .medium))
-                    .foregroundColor(.black)
-                    .padding(.horizontal, 16)
-                    .padding(.vertical, 8)
-                    .background(Color.white.opacity(0.95))
-                    .clipShape(Capsule())
+                // Allow button
+                Button {
+                    onApprove()
+                } label: {
+                    Text("Allow")
+                        .font(.system(size: 13, weight: .medium))
+                        .foregroundColor(.black)
+                        .padding(.horizontal, 16)
+                        .padding(.vertical, 8)
+                        .background(Color.white.opacity(0.95))
+                        .clipShape(Capsule())
+                }
+                .buttonStyle(.plain)
+                .opacity(showAllowButton ? 1 : 0)
+                .scaleEffect(showAllowButton ? 1 : 0.8)
             }
-            .buttonStyle(.plain)
-            .opacity(showAllowButton ? 1 : 0)
-            .scaleEffect(showAllowButton ? 1 : 0.8)
         }
-        .frame(minHeight: 44)  // Consistent height with other bars
+        .frame(minHeight: 44)  // Consistent floor with other bars; grows to fit content
         .padding(.horizontal, 16)
         .padding(.vertical, 12)
         .background(Color.black.opacity(0.2))
@@ -1121,6 +1121,95 @@ struct ChatApprovalBar: View {
             withAnimation(.spring(response: 0.35, dampingFraction: 0.7).delay(0.15)) {
                 showAllowButton = true
             }
+        }
+    }
+
+    // MARK: - Tool-specific bodies
+
+    @ViewBuilder
+    private var approvalBody: some View {
+        switch tool {
+        case "Bash":
+            bashBody
+        case "Edit", "Write":
+            editLikeBody
+        default:
+            genericBody
+        }
+    }
+
+    /// Bash: show the command verbatim in monospaced text so a shell pipeline lines up
+    /// like a shell pipeline. Caps at 8 lines so a pathologically long command doesn't
+    /// eat the entire chat. Description goes on a smaller italic line below.
+    @ViewBuilder
+    private var bashBody: some View {
+        if let command = toolInputFields["command"], !command.isEmpty {
+            Text(command)
+                .font(.system(size: 11, design: .monospaced))
+                .foregroundColor(.white.opacity(0.75))
+                .lineLimit(8)
+                .truncationMode(.tail)
+                .textSelection(.enabled)
+                .fixedSize(horizontal: false, vertical: true)
+                .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        if let description = toolInputFields["description"], !description.isEmpty {
+            Text(description)
+                .font(.system(size: 10))
+                .foregroundColor(.white.opacity(0.45))
+                .italic()
+                .lineLimit(2)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+    }
+
+    /// Edit/Write: show the file path + a 6-line preview of the new content.
+    @ViewBuilder
+    private var editLikeBody: some View {
+        if let path = toolInputFields["file_path"], !path.isEmpty {
+            HStack(spacing: 4) {
+                Image(systemName: "doc.text")
+                    .font(.system(size: 9))
+                Text(URL(fileURLWithPath: path).lastPathComponent)
+                    .font(.system(size: 11, design: .monospaced))
+            }
+            .foregroundColor(.white.opacity(0.75))
+        }
+        if tool == "Write", let content = toolInputFields["content"], !content.isEmpty {
+            Text(content)
+                .font(.system(size: 10, design: .monospaced))
+                .foregroundColor(.white.opacity(0.5))
+                .lineLimit(6)
+                .truncationMode(.tail)
+                .fixedSize(horizontal: false, vertical: true)
+                .frame(maxWidth: .infinity, alignment: .leading)
+        } else if tool == "Edit", let new = toolInputFields["new_string"], !new.isEmpty {
+            Text(new)
+                .font(.system(size: 10, design: .monospaced))
+                .foregroundColor(.white.opacity(0.5))
+                .lineLimit(6)
+                .truncationMode(.tail)
+                .fixedSize(horizontal: false, vertical: true)
+                .frame(maxWidth: .infinity, alignment: .leading)
+        }
+    }
+
+    /// Generic fallback: multi-line `key: value` body for tools we don't special-case.
+    /// No per-value 100-char clamp anymore — just a 6-line cap on the whole thing.
+    @ViewBuilder
+    private var genericBody: some View {
+        let lines = toolInputFields
+            .sorted { $0.key < $1.key }
+            .map { "\($0.key): \($0.value)" }
+            .joined(separator: "\n")
+        if !lines.isEmpty {
+            Text(lines)
+                .font(.system(size: 11))
+                .foregroundColor(.white.opacity(0.5))
+                .lineLimit(6)
+                .truncationMode(.tail)
+                .fixedSize(horizontal: false, vertical: true)
+                .frame(maxWidth: .infinity, alignment: .leading)
         }
     }
 }
