@@ -126,9 +126,24 @@ struct InstanceRow: View {
     let onApprove: () -> Void
     let onReject: () -> Void
 
+    @EnvironmentObject private var viewModel: NotchViewModel
     @State private var isHovered = false
+    @State private var isPlanTileHovered = false
     @State private var spinnerPhase = 0
     @State private var isYabaiAvailable = false
+
+    /// Extract a clean one-line title from a markdown plan body — strips leading
+    /// `#` heading markers and whitespace, takes the first non-empty line.
+    private func planTitle(from plan: String) -> String {
+        for rawLine in plan.split(separator: "\n", omittingEmptySubsequences: false) {
+            let line = rawLine.drop(while: { $0 == "#" || $0 == " " || $0 == "\t" })
+            let trimmed = line.trimmingCharacters(in: .whitespaces)
+            if !trimmed.isEmpty {
+                return String(trimmed.prefix(80))
+            }
+        }
+        return "View plan"
+    }
 
     private let claudeOrange = Color(red: 0.85, green: 0.47, blue: 0.34)
     private let spinnerSymbols = ["·", "✢", "✳", "∗", "✻", "✽"]
@@ -171,7 +186,41 @@ struct InstanceRow: View {
                 }
 
                 // Show tool call when waiting for approval, otherwise last activity
-                if isWaitingForApproval, let toolName = session.pendingToolName {
+                if isWaitingForApproval, let plan = session.pendingPlanText {
+                    // ExitPlanMode special case: instead of dumping `plan: # ...` as raw
+                    // key:value text, show the plan title and make the tile clickable so
+                    // the user can read the full markdown in the centered plan viewer
+                    // before deciding to approve or deny.
+                    Button {
+                        viewModel.notchOpen(reason: .click)
+                        withAnimation(.spring(response: 0.35, dampingFraction: 0.82)) {
+                            viewModel.showPlan(text: plan, returnTo: .instances)
+                        }
+                    } label: {
+                        HStack(spacing: 6) {
+                            Text("Plan")
+                                .font(.system(size: 11, weight: .medium, design: .monospaced))
+                                .foregroundColor(TerminalColors.amber.opacity(0.9))
+                            Text(planTitle(from: plan))
+                                .font(.system(size: 11))
+                                .foregroundColor(isPlanTileHovered ? .white.opacity(0.85) : .white.opacity(0.5))
+                                .lineLimit(1)
+                                .truncationMode(.tail)
+                            Image(systemName: "arrow.up.left.and.arrow.down.right")
+                                .font(.system(size: 8, weight: .medium))
+                                .foregroundColor(isPlanTileHovered ? .white.opacity(0.7) : .white.opacity(0.3))
+                        }
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 3)
+                        .background(
+                            RoundedRectangle(cornerRadius: 5)
+                                .fill(isPlanTileHovered ? Color.white.opacity(0.08) : Color.clear)
+                        )
+                        .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .onHover { isPlanTileHovered = $0 }
+                } else if isWaitingForApproval, let toolName = session.pendingToolName {
                     // Show tool name in amber + input on same line
                     HStack(spacing: 4) {
                         Text(MCPToolFormatter.formatToolName(toolName))

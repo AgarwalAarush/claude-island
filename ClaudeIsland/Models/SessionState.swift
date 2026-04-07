@@ -163,6 +163,15 @@ struct SessionState: Equatable, Identifiable, Sendable {
         activePermission?.formattedInput
     }
 
+    /// Full plan markdown when the pending tool is `ExitPlanMode` — extracted directly
+    /// from the permission's tool input so the UI can render it before the tool result
+    /// arrives. Returns nil for any other pending tool or if there's no plan field.
+    var pendingPlanText: String? {
+        guard let perm = activePermission, perm.toolName == "ExitPlanMode" else { return nil }
+        guard let plan = perm.toolInput?["plan"]?.value as? String, !plan.isEmpty else { return nil }
+        return plan
+    }
+
     /// Last message content
     var lastMessage: String? {
         conversationInfo.lastMessage
