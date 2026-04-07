@@ -26,6 +26,7 @@ struct NotchView: View {
     @State private var isVisible: Bool = true
     @State private var isHovering: Bool = false
     @State private var isBouncing: Bool = false
+    @State private var isMenuButtonHovered: Bool = false
 
     @Namespace private var activityNamespace
 
@@ -306,6 +307,12 @@ struct NotchView: View {
 
     // MARK: - Opened Header Content
 
+    /// True when the stats chart button should be hidden (chat or menu modes)
+    private var hideStatsButton: Bool {
+        if case .chat = viewModel.contentType { return true }
+        return viewModel.contentType == .menu
+    }
+
     @ViewBuilder
     private var openedHeaderContent: some View {
         HStack(spacing: 12) {
@@ -319,6 +326,22 @@ struct NotchView: View {
 
             Spacer()
 
+            // Stats toggle button
+            Button {
+                withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
+                    viewModel.contentType == .stats ? viewModel.exitStats() : viewModel.showStats()
+                }
+            } label: {
+                Image(systemName: viewModel.contentType == .stats ? "xmark" : "chart.bar.xaxis")
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundColor(.white.opacity(viewModel.contentType == .stats ? 1.0 : 0.6))
+                    .frame(width: 22, height: 22)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .opacity(hideStatsButton ? 0 : 1)
+            .allowsHitTesting(!hideStatsButton)
+
             // Menu toggle
             Button {
                 withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
@@ -331,8 +354,12 @@ struct NotchView: View {
                 ZStack(alignment: .topTrailing) {
                     Image(systemName: viewModel.contentType == .menu ? "xmark" : "line.3.horizontal")
                         .font(.system(size: 11, weight: .medium))
-                        .foregroundColor(.white)
+                        .foregroundColor(isMenuButtonHovered ? .white.opacity(0.8) : .white.opacity(0.4))
                         .frame(width: 22, height: 22)
+                        .background(
+                            RoundedRectangle(cornerRadius: 6)
+                                .fill(isMenuButtonHovered ? Color.white.opacity(0.1) : Color.clear)
+                        )
                         .contentShape(Rectangle())
 
                     // Green dot for unseen update
@@ -345,6 +372,7 @@ struct NotchView: View {
                 }
             }
             .buttonStyle(.plain)
+            .onHover { isMenuButtonHovered = $0 }
         }
     }
 
@@ -359,6 +387,8 @@ struct NotchView: View {
                     sessionMonitor: sessionMonitor,
                     viewModel: viewModel
                 )
+            case .stats:
+                StatsView(sessionMonitor: sessionMonitor, viewModel: viewModel)
             case .menu:
                 NotchMenuView(viewModel: viewModel)
             case .chat(let session):

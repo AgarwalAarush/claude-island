@@ -27,12 +27,14 @@ enum NotchContentType: Equatable {
     case instances
     case menu
     case chat(SessionState)
+    case stats
 
     var id: String {
         switch self {
         case .instances: return "instances"
         case .menu: return "menu"
         case .chat(let session): return "chat-\(session.sessionId)"
+        case .stats: return "stats"
         }
     }
 }
@@ -45,6 +47,7 @@ class NotchViewModel: ObservableObject {
     @Published var openReason: NotchOpenReason = .unknown
     @Published var contentType: NotchContentType = .instances
     @Published var isHovering: Bool = false
+    @Published var projectScanResults: [String: ProjectScanResult] = [:]
 
     // MARK: - Dependencies
 
@@ -69,6 +72,11 @@ class NotchViewModel: ObservableObject {
             return CGSize(
                 width: min(screenRect.width * 0.5, 600),
                 height: 580
+            )
+        case .stats:
+            return CGSize(
+                width: min(screenRect.width * 0.5, 600),
+                height: 500
             )
         case .menu:
             // Compact size for settings menu
@@ -308,6 +316,21 @@ class NotchViewModel: ObservableObject {
     func exitChat() {
         currentChatSession = nil
         contentType = .instances
+    }
+
+    func showStats() { contentType = .stats }
+
+    func exitStats() { contentType = .instances }
+
+    func triggerProjectScans(for cwds: [String]) {
+        Task { [weak self] in
+            guard let self else { return }
+            for cwd in cwds {
+                if let r = await ProjectAnalyzer.shared.scan(cwd: cwd) {
+                    await MainActor.run { self.projectScanResults[cwd] = r }
+                }
+            }
+        }
     }
 
     /// Perform boot animation: expand briefly then collapse

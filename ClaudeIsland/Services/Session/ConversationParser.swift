@@ -17,6 +17,8 @@ struct ConversationInfo: Equatable {
     let firstUserMessage: String?  // Fallback title when no summary
     let lastUserMessageDate: Date?  // Timestamp of last user message (for stable sorting)
     let sessionName: String?  // Claude Code's /resume title from ~/.claude/sessions/<pid>.json
+    let totalInputTokens: Int   // sum of input_tokens across all assistant messages
+    let totalOutputTokens: Int  // sum of output_tokens across all assistant messages
 
     init(
         summary: String?,
@@ -25,7 +27,9 @@ struct ConversationInfo: Equatable {
         lastToolName: String?,
         firstUserMessage: String?,
         lastUserMessageDate: Date?,
-        sessionName: String? = nil
+        sessionName: String? = nil,
+        totalInputTokens: Int = 0,
+        totalOutputTokens: Int = 0
     ) {
         self.summary = summary
         self.lastMessage = lastMessage
@@ -34,6 +38,8 @@ struct ConversationInfo: Equatable {
         self.firstUserMessage = firstUserMessage
         self.lastUserMessageDate = lastUserMessageDate
         self.sessionName = sessionName
+        self.totalInputTokens = totalInputTokens
+        self.totalOutputTokens = totalOutputTokens
     }
 
     /// Return a copy with `sessionName` replaced — used so we can refresh the
@@ -46,7 +52,9 @@ struct ConversationInfo: Equatable {
             lastToolName: lastToolName,
             firstUserMessage: firstUserMessage,
             lastUserMessageDate: lastUserMessageDate,
-            sessionName: name
+            sessionName: name,
+            totalInputTokens: totalInputTokens,
+            totalOutputTokens: totalOutputTokens
         )
     }
 }
@@ -228,13 +236,28 @@ actor ConversationParser {
             }
         }
 
+        // Token accumulation: forward pass over all assistant messages
+        var totalInputTokens = 0, totalOutputTokens = 0
+        for line in lines {
+            guard let lineData = line.data(using: .utf8),
+                  let json = try? JSONSerialization.jsonObject(with: lineData) as? [String: Any],
+                  json["type"] as? String == "assistant",
+                  json["isMeta"] as? Bool != true,
+                  let msg = json["message"] as? [String: Any],
+                  let usage = msg["usage"] as? [String: Any] else { continue }
+            totalInputTokens  += usage["input_tokens"]  as? Int ?? 0
+            totalOutputTokens += usage["output_tokens"] as? Int ?? 0
+        }
+
         return ConversationInfo(
             summary: summary,
             lastMessage: Self.truncateMessage(lastMessage, maxLength: 80),
             lastMessageRole: lastMessageRole,
             lastToolName: lastToolName,
             firstUserMessage: firstUserMessage,
-            lastUserMessageDate: lastUserMessageDate
+            lastUserMessageDate: lastUserMessageDate,
+            totalInputTokens: totalInputTokens,
+            totalOutputTokens: totalOutputTokens
         )
     }
 
