@@ -85,6 +85,7 @@ def main():
     # Get process info
     claude_pid = os.getppid()
     tty = get_tty()
+    hostname = socket.gethostname()
 
     # Build state object
     state = {
@@ -93,6 +94,7 @@ def main():
         "event": event,
         "pid": claude_pid,
         "tty": tty,
+        "hostname": hostname,
     }
 
     # Map events to status

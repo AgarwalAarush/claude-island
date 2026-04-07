@@ -158,6 +158,18 @@ struct InstanceRow: View {
                     .foregroundColor(.white)
                     .lineLimit(1)
 
+                if let host = session.remoteHost {
+                    HStack(spacing: 3) {
+                        Image(systemName: "network")
+                            .font(.system(size: 9, weight: .medium))
+                            .foregroundColor(.white.opacity(0.3))
+                        Text(host.components(separatedBy: ".").first ?? host)
+                            .font(.system(size: 10))
+                            .foregroundColor(.white.opacity(0.3))
+                            .lineLimit(1)
+                    }
+                }
+
                 // Show tool call when waiting for approval, otherwise last activity
                 if isWaitingForApproval, let toolName = session.pendingToolName {
                     // Show tool name in amber + input on same line

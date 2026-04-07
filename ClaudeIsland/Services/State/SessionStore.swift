@@ -133,6 +133,9 @@ actor SessionStore {
         if let tty = event.tty {
             session.tty = tty.replacingOccurrences(of: "/dev/", with: "")
         }
+        if session.remoteHost == nil {
+            session.remoteHost = resolveRemoteHost(event.hostname)
+        }
         session.lastActivity = Date()
 
         if event.status == "ended" {
@@ -177,8 +180,20 @@ actor SessionStore {
             pid: event.pid,
             tty: event.tty?.replacingOccurrences(of: "/dev/", with: ""),
             isInTmux: false,  // Will be updated
+            remoteHost: resolveRemoteHost(event.hostname),
             phase: .idle
         )
+    }
+
+    /// Returns the event's hostname if it differs from the local machine, nil otherwise.
+    /// Compares short hostnames (first component before any dot) to handle
+    /// cases where ProcessInfo returns a FQDN but the remote reports a short name.
+    private func resolveRemoteHost(_ hostname: String?) -> String? {
+        guard let hostname else { return nil }
+        let local = ProcessInfo.processInfo.hostName
+        let localShort = local.components(separatedBy: ".").first ?? local
+        let remoteShort = hostname.components(separatedBy: ".").first ?? hostname
+        return remoteShort.lowercased() != localShort.lowercased() ? hostname : nil
     }
 
     private func processToolTracking(event: HookEvent, session: inout SessionState) {
