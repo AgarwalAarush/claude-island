@@ -164,6 +164,63 @@ struct ConversationTextFilterTests {
             )
         }
 
+        // MARK: - isClearCommandLine
+
+        test("isClearCommandLine detects a real /clear user command") {
+            let line = #"{"type":"user","message":{"role":"user","content":"<command-message>clear</command-message>\n<command-name>/clear</command-name>"},"uuid":"x","timestamp":"2026-04-06T00:00:00Z","sessionId":"s"}"#
+            assertTrue(
+                ConversationTextFilter.isClearCommandLine(line),
+                "real /clear command should be detected"
+            )
+        }
+
+        test("isClearCommandLine does NOT detect tool_result echoing the literal string (regression)") {
+            // This is the exact bug: an Edit tool result that echoes back
+            // ConversationParser.swift source code containing the literal
+            // search pattern the parser is looking for.
+            let line = #"{"type":"user","message":{"role":"user","content":[{"tool_use_id":"toolu_1","type":"tool_result","content":"The file was updated. Here is the diff:\n+ if line.contains(\"<command-name>/clear</command-name>\") {"}]}}"#
+            assertTrue(
+                !ConversationTextFilter.isClearCommandLine(line),
+                "tool_result echoing the literal string must NOT be detected as /clear"
+            )
+        }
+
+        test("isClearCommandLine does not detect assistant messages containing the string") {
+            let line = #"{"type":"assistant","message":{"role":"assistant","content":"I could run <command-name>/clear</command-name> for you"}}"#
+            assertTrue(
+                !ConversationTextFilter.isClearCommandLine(line),
+                "assistant messages shouldn't trigger /clear"
+            )
+        }
+
+        test("isClearCommandLine rejects lines that don't contain the pattern at all") {
+            let line = #"{"type":"user","message":{"role":"user","content":"Hello world"}}"#
+            assertTrue(
+                !ConversationTextFilter.isClearCommandLine(line),
+                "unrelated user messages shouldn't trigger /clear"
+            )
+        }
+
+        test("isClearCommandLine rejects malformed JSON gracefully") {
+            assertTrue(
+                !ConversationTextFilter.isClearCommandLine("not json <command-name>/clear</command-name>"),
+                "malformed JSON with the pattern shouldn't crash or trigger"
+            )
+            assertTrue(
+                !ConversationTextFilter.isClearCommandLine(""),
+                "empty line doesn't trigger"
+            )
+        }
+
+        test("isClearCommandLine accepts /clear when it's the second line of a multiline content string") {
+            // content is still a plain string, just with a newline
+            let line = #"{"type":"user","message":{"role":"user","content":"<command-message>clear</command-message>\n<command-name>/clear</command-name>"}}"#
+            assertTrue(
+                ConversationTextFilter.isClearCommandLine(line),
+                "multiline string content with the pattern should still be detected"
+            )
+        }
+
         finish("ConversationTextFilterTests")
     }
 }

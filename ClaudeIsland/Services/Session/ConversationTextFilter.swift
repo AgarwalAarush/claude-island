@@ -47,4 +47,32 @@ enum ConversationTextFilter {
         }
         return nil
     }
+
+    /// Returns true if the given JSONL line represents a genuine `/clear`
+    /// user command — as opposed to a tool result whose body happens to
+    /// contain the literal string `<command-name>/clear</command-name>`
+    /// (e.g. from editing ConversationParser.swift itself, which was a
+    /// real self-referential bug in this project).
+    ///
+    /// A real user slash-command has `type == "user"` and
+    /// `message.content` as a plain **string** containing the command
+    /// tags. Tool results have `message.content` as an **array** of
+    /// content blocks, so excluding the array form drops the whole class
+    /// of false positives in one check.
+    static func isClearCommandLine(_ line: String) -> Bool {
+        // Fast reject: if the literal pattern isn't on this line, it's not a /clear.
+        guard line.contains("<command-name>/clear</command-name>") else {
+            return false
+        }
+
+        guard let data = line.data(using: .utf8),
+              let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              json["type"] as? String == "user",
+              let message = json["message"] as? [String: Any],
+              let content = message["content"] as? String else {
+            return false
+        }
+
+        return content.contains("<command-name>/clear</command-name>")
+    }
 }

@@ -391,7 +391,11 @@ actor ConversationParser {
         var newMessages: [ChatMessage] = []
 
         for line in lines where !line.isEmpty {
-            if line.contains("<command-name>/clear</command-name>") {
+            // Use the JSON-aware detector — naive `line.contains("<command-name>/clear</command-name>")`
+            // false-positives on tool_result messages whose body echoes the
+            // literal string (e.g. edits to this very file). See
+            // ConversationTextFilter.isClearCommandLine for details.
+            if ConversationTextFilter.isClearCommandLine(line) {
                 state.messages = []
                 state.seenToolIds = []
                 state.toolIdToName = [:]
