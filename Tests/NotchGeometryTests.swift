@@ -86,6 +86,37 @@ struct NotchGeometryTests {
             assertEqual(NotchGeometry.rightInset, 8, "rightInset is 8pt")
         }
 
+        test("panelScreenRect(.topTrailing) matches legacy openedScreenRect") {
+            let size = CGSize(width: 600, height: 580)
+            let legacy = geometry.openedScreenRect(for: size)
+            let routed = geometry.panelScreenRect(for: size, anchor: .topTrailing)
+            assertEqual(routed.minX, legacy.minX, "minX matches legacy path")
+            assertEqual(routed.minY, legacy.minY, "minY matches legacy path")
+            assertEqual(routed.width, legacy.width, "width matches legacy path")
+            assertEqual(routed.height, legacy.height, "height matches legacy path")
+        }
+
+        test("panelScreenRect(.center) sits at screen midpoint") {
+            let size = CGSize(width: 720, height: 600)
+            let r = geometry.panelScreenRect(for: size, anchor: .center)
+            assertEqual(r.midX, screenRect.midX, "panel is horizontally centered on screen")
+            assertEqual(r.midY, screenRect.midY, "panel is vertically centered on screen")
+            assertEqual(r.width, size.width, "width is unshrunk (no tuning offset for center anchor)")
+            assertEqual(r.height, size.height, "height is unshrunk (no tuning offset for center anchor)")
+        }
+
+        test("panelScreenRect(.center) stays centered as size changes") {
+            let small = geometry.panelScreenRect(for: CGSize(width: 480, height: 320), anchor: .center)
+            let large = geometry.panelScreenRect(for: CGSize(width: 720, height: 600), anchor: .center)
+            assertEqual(small.midX, large.midX, "midX stays locked to screen midX")
+            assertEqual(small.midY, large.midY, "midY stays locked to screen midY")
+            // Larger panel extends further in all directions from the center
+            assertTrue(large.minX < small.minX, "larger panel extends further left")
+            assertTrue(large.maxX > small.maxX, "larger panel extends further right")
+            assertTrue(large.minY < small.minY, "larger panel extends further down")
+            assertTrue(large.maxY > small.maxY, "larger panel extends further up")
+        }
+
         finish("NotchGeometryTests")
     }
 }
