@@ -11,8 +11,8 @@ struct HookInstaller {
 
     /// Install hook script and update settings.json on app launch
     static func installIfNeeded() {
-        let claudeDir = FileManager.default.homeDirectoryForCurrentUser
-            .appendingPathComponent(".claude")
+        let home = FileManager.default.homeDirectoryForCurrentUser
+        let claudeDir = home.appendingPathComponent(".claude")
         let hooksDir = claudeDir.appendingPathComponent("hooks")
         let pythonScript = hooksDir.appendingPathComponent("claude-island-state.py")
         let settings = claudeDir.appendingPathComponent("settings.json")
@@ -32,6 +32,19 @@ struct HookInstaller {
         }
 
         updateSettings(at: settings)
+        installRemoteSetupScript(to: home.appendingPathComponent(".claude-island"))
+    }
+
+    /// Copy the remote-install helper to ~/.claude-island/ so SSH LocalCommand can call it
+    /// from a stable path regardless of where the app's source repo lives.
+    private static func installRemoteSetupScript(to dir: URL) {
+        let fm = FileManager.default
+        try? fm.createDirectory(at: dir, withIntermediateDirectories: true)
+        guard let bundled = Bundle.main.url(forResource: "install-remote-hooks", withExtension: "sh") else { return }
+        let dest = dir.appendingPathComponent("install-remote-hooks.sh")
+        try? fm.removeItem(at: dest)
+        try? fm.copyItem(at: bundled, to: dest)
+        try? fm.setAttributes([.posixPermissions: 0o755], ofItemAtPath: dest.path)
     }
 
     private static func updateSettings(at settingsURL: URL) {
