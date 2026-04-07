@@ -105,9 +105,8 @@ actor SessionStore {
         case .subagentStopped(let sessionId, let taskToolId):
             processSubagentStopped(sessionId: sessionId, taskToolId: taskToolId)
 
-        case .agentFileUpdated:
-            // No longer used - subagent tools are populated from JSONL completion
-            break
+        case .agentFileUpdated(let sessionId, let taskToolId, let tools):
+            await processAgentFileUpdated(sessionId: sessionId, taskToolId: taskToolId, tools: tools)
         }
 
         publishState()
@@ -205,11 +204,7 @@ actor SessionStore {
                 // Skip creating top-level placeholder for subagent tools
                 // They'll appear under their parent Task instead
                 let isSubagentTool = session.subagentState.hasActiveSubagent && toolName != "Task"
-                let hasActiveSubagent = session.subagentState.hasActiveSubagent
-                let activeTaskCount = session.subagentState.activeTasks.count
-                Self.logger.notice("[SUBAGENT-DEBUG] PreToolUse tool=\(toolName, privacy: .public) id=\(toolUseId.prefix(12), privacy: .public) hasActiveSubagent=\(hasActiveSubagent, privacy: .public) activeTasks=\(activeTaskCount, privacy: .public) isSubagentTool=\(isSubagentTool, privacy: .public)")
                 if isSubagentTool {
-                    Self.logger.notice("[SUBAGENT-DEBUG] SKIPPING top-level placeholder for \(toolName, privacy: .public) (will be populated from agent file)")
                     return
                 }
 
@@ -276,21 +271,18 @@ actor SessionStore {
             if event.tool == "Task", let toolUseId = event.toolUseId {
                 let description = event.toolInput?["description"]?.value as? String
                 session.subagentState.startTask(taskToolId: toolUseId, description: description)
-                let activeTaskCount = session.subagentState.activeTasks.count
-                Self.logger.notice("[SUBAGENT-DEBUG] Started Task subagent tracking: id=\(toolUseId.prefix(12), privacy: .public) desc=\(description ?? "nil", privacy: .public) activeTasks=\(activeTaskCount, privacy: .public)")
+                Self.logger.debug("Started Task subagent tracking: \(toolUseId.prefix(12), privacy: .public)")
             }
 
         case "PostToolUse":
             if event.tool == "Task" {
-                let activeTaskCount = session.subagentState.activeTasks.count
-                Self.logger.notice("[SUBAGENT-DEBUG] PostToolUse for Task received (activeTasks=\(activeTaskCount, privacy: .public))")
+                Self.logger.debug("PostToolUse for Task received")
             }
 
         case "SubagentStop":
-            // SubagentStop fires when a subagent completes - stop tracking
-            // Subagent tools are populated from agent file in processFileUpdated
-            let activeTaskCount = session.subagentState.activeTasks.count
-            Self.logger.notice("[SUBAGENT-DEBUG] SubagentStop received (activeTasks=\(activeTaskCount, privacy: .public))")
+            // SubagentStop fires when a subagent completes - subagent tools are
+            // populated from agent file in processFileUpdated / processAgentFileUpdated
+            Self.logger.debug("SubagentStop received")
 
         default:
             break
@@ -645,6 +637,7 @@ actor SessionStore {
             cwd: payload.cwd,
             structuredResults: payload.structuredResults
         )
+        removeSubagentToolsFromTopLevel(session: &session)
 
         sessions[payload.sessionId] = session
 
@@ -657,45 +650,80 @@ actor SessionStore {
         )
     }
 
-    /// Populate subagent tools for Task tools using their agent JSONL files
+    /// Populate subagent tools for Task tools using their agent JSONL files.
+    /// Handles both completed Tasks (via structured result) and in-progress
+    /// Tasks (by discovering the agent file via mtime/creation time).
     private func populateSubagentToolsFromAgentFiles(
         session: inout SessionState,
         cwd: String,
         structuredResults: [String: ToolResultData]
     ) async {
-        let taskCount = session.chatItems.filter {
-            if case .toolCall(let t) = $0.type { return t.name == "Task" }
-            return false
-        }.count
-        let chatItemCount = session.chatItems.count
-        let structuredResultCount = structuredResults.count
-        Self.logger.notice("[SUBAGENT-DEBUG] populateSubagentToolsFromAgentFiles: chatItems=\(chatItemCount, privacy: .public) taskTools=\(taskCount, privacy: .public) structuredResults=\(structuredResultCount, privacy: .public)")
+        // Collect agentIds already claimed by other Tasks so discovery can skip them
+        var claimedAgentIds: Set<String> = []
+        for item in session.chatItems {
+            if case .toolCall(let t) = item.type, t.name == "Task" {
+                if let activeAgentId = session.subagentState.activeTasks[item.id]?.agentId {
+                    claimedAgentIds.insert(activeAgentId)
+                }
+                if let sr = structuredResults[item.id],
+                   case .task(let tr) = sr,
+                   !tr.agentId.isEmpty {
+                    claimedAgentIds.insert(tr.agentId)
+                }
+            }
+        }
 
         for i in 0..<session.chatItems.count {
             guard case .toolCall(var tool) = session.chatItems[i].type,
                   tool.name == "Task" else { continue }
 
             let taskToolId = session.chatItems[i].id
-            let hasStructured = structuredResults[taskToolId] != nil
-            var agentIdDebug = "none"
-            if let sr = structuredResults[taskToolId], case .task(let tr) = sr {
-                agentIdDebug = tr.agentId.isEmpty ? "empty" : String(tr.agentId.prefix(8))
-            }
-            Self.logger.notice("[SUBAGENT-DEBUG] Task \(taskToolId.prefix(12), privacy: .public) hasStructuredResult=\(hasStructured, privacy: .public) agentId=\(agentIdDebug, privacy: .public)")
 
-            guard let structuredResult = structuredResults[taskToolId],
-                  case .task(let taskResult) = structuredResult,
-                  !taskResult.agentId.isEmpty else { continue }
+            // Resolve agentId: structured result → activeTasks cache → filesystem discovery
+            var resolvedAgentId: String? = nil
+
+            if let sr = structuredResults[taskToolId],
+               case .task(let taskResult) = sr,
+               !taskResult.agentId.isEmpty {
+                resolvedAgentId = taskResult.agentId
+            } else if let cached = session.subagentState.activeTasks[taskToolId]?.agentId,
+                      !cached.isEmpty {
+                resolvedAgentId = cached
+            } else if let discovered = discoverAgentIdForTask(
+                taskToolId: taskToolId,
+                taskStartTime: session.subagentState.activeTasks[taskToolId]?.startTime
+                    ?? session.chatItems[i].timestamp,
+                cwd: cwd,
+                claimedAgentIds: claimedAgentIds
+            ) {
+                resolvedAgentId = discovered
+                session.subagentState.setAgentId(discovered, for: taskToolId)
+                claimedAgentIds.insert(discovered)
+            }
+
+            guard let agentId = resolvedAgentId else { continue }
 
             // Store agentId → description mapping for AgentOutputTool display
             if let description = session.subagentState.activeTasks[taskToolId]?.description {
-                session.subagentState.agentDescriptions[taskResult.agentId] = description
+                session.subagentState.agentDescriptions[agentId] = description
             } else if let description = tool.input["description"] {
-                session.subagentState.agentDescriptions[taskResult.agentId] = description
+                session.subagentState.agentDescriptions[agentId] = description
+            }
+
+            // Start a live watcher for this Task's agent file so future updates
+            // arrive via .agentFileUpdated without needing another JSONL parse.
+            let sessionId = session.sessionId
+            Task { @MainActor in
+                AgentFileWatcherManager.shared.startWatching(
+                    sessionId: sessionId,
+                    taskToolId: taskToolId,
+                    agentId: agentId,
+                    cwd: cwd
+                )
             }
 
             let subagentToolInfos = await ConversationParser.shared.parseSubagentTools(
-                agentId: taskResult.agentId,
+                agentId: agentId,
                 cwd: cwd
             )
 
@@ -717,8 +745,102 @@ actor SessionStore {
                 timestamp: session.chatItems[i].timestamp
             )
 
-            Self.logger.debug("Populated \(subagentToolInfos.count) subagent tools for Task \(taskToolId.prefix(12), privacy: .public) from agent \(taskResult.agentId.prefix(8), privacy: .public)")
+            Self.logger.debug("Populated \(subagentToolInfos.count) subagent tools for Task \(taskToolId.prefix(12), privacy: .public) from agent \(agentId.prefix(8), privacy: .public)")
         }
+    }
+
+    /// Scans `~/.claude/projects/<encoded-cwd>/agent-*.jsonl` for a file that
+    /// could belong to an in-progress Task whose agentId isn't yet known.
+    /// Matches by earliest mtime >= taskStartTime, excluding already-claimed agentIds.
+    nonisolated private func discoverAgentIdForTask(
+        taskToolId: String,
+        taskStartTime: Date,
+        cwd: String,
+        claimedAgentIds: Set<String>
+    ) -> String? {
+        let projectDir = cwd.replacingOccurrences(of: "/", with: "-")
+                            .replacingOccurrences(of: ".", with: "-")
+        let dir = NSHomeDirectory() + "/.claude/projects/" + projectDir
+        let url = URL(fileURLWithPath: dir)
+        guard let entries = try? FileManager.default.contentsOfDirectory(
+            at: url,
+            includingPropertiesForKeys: [.contentModificationDateKey],
+            options: [.skipsHiddenFiles]
+        ) else { return nil }
+
+        // Give a 2-second grace window so files created slightly before the
+        // in-memory taskStartTime are still considered candidates.
+        let lowerBound = taskStartTime.addingTimeInterval(-2)
+
+        var candidates: [(agentId: String, mtime: Date)] = []
+        for file in entries {
+            let name = file.lastPathComponent
+            guard name.hasPrefix("agent-"), name.hasSuffix(".jsonl") else { continue }
+            let agentId = String(name.dropFirst("agent-".count).dropLast(".jsonl".count))
+            if claimedAgentIds.contains(agentId) { continue }
+            guard let attrs = try? file.resourceValues(forKeys: [.contentModificationDateKey]),
+                  let mtime = attrs.contentModificationDate,
+                  mtime >= lowerBound else { continue }
+            candidates.append((agentId, mtime))
+        }
+
+        // Pick the earliest-created candidate (first to start after the Task did)
+        return candidates.sorted { $0.mtime < $1.mtime }.first?.agentId
+    }
+
+    /// Removes top-level chatItems whose IDs are already nested inside a Task's
+    /// `subagentTools` array. Belt-and-suspenders cleanup so the display never
+    /// shows the same tool twice (once as top-level, once under the parent Task).
+    private func removeSubagentToolsFromTopLevel(session: inout SessionState) {
+        var subagentIds: Set<String> = []
+        for item in session.chatItems {
+            if case .toolCall(let tool) = item.type, tool.name == "Task" {
+                subagentIds.formUnion(tool.subagentTools.map(\.id))
+            }
+        }
+        guard !subagentIds.isEmpty else { return }
+        let before = session.chatItems.count
+        session.chatItems.removeAll { item in
+            guard case .toolCall(let tool) = item.type, tool.name != "Task" else { return false }
+            return subagentIds.contains(item.id)
+        }
+        let removed = before - session.chatItems.count
+        if removed > 0 {
+            Self.logger.debug("Removed \(removed) subagent tool(s) from top-level chat items")
+        }
+    }
+
+    /// Handle a real-time update from an AgentFileWatcher. Merges the parsed
+    /// subagent tools into the matching Task's `subagentTools` array, then
+    /// cleans up any top-level duplicates.
+    private func processAgentFileUpdated(
+        sessionId: String,
+        taskToolId: String,
+        tools: [SubagentToolInfo]
+    ) async {
+        guard var session = sessions[sessionId] else { return }
+        guard let idx = session.chatItems.firstIndex(where: { $0.id == taskToolId }),
+              case .toolCall(var tool) = session.chatItems[idx].type,
+              tool.name == "Task" else { return }
+
+        tool.subagentTools = tools.map { info in
+            SubagentToolCall(
+                id: info.id,
+                name: info.name,
+                input: info.input,
+                status: info.isCompleted ? .success : .running,
+                timestamp: parseTimestamp(info.timestamp) ?? Date()
+            )
+        }
+        session.chatItems[idx] = ChatHistoryItem(
+            id: taskToolId,
+            type: .toolCall(tool),
+            timestamp: session.chatItems[idx].timestamp
+        )
+        removeSubagentToolsFromTopLevel(session: &session)
+        sessions[sessionId] = session
+        publishState()
+        Self.logger.debug("AgentFileUpdated: Task \(taskToolId.prefix(12), privacy: .public) now has \(tools.count) subagent tools")
     }
 
     /// Emit toolCompleted events for tools that have results in JSONL but aren't marked complete yet
@@ -881,6 +1003,9 @@ actor SessionStore {
     private func processSessionEnd(sessionId: String) async {
         sessions.removeValue(forKey: sessionId)
         cancelPendingSync(sessionId: sessionId)
+        Task { @MainActor in
+            AgentFileWatcherManager.shared.stopWatchingSession(sessionId: sessionId)
+        }
     }
 
     // MARK: - History Loading

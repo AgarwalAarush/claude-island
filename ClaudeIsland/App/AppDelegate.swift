@@ -71,6 +71,12 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         Mixpanel.mainInstance().flush()
 
         HookInstaller.installIfNeeded()
+
+        // Wire up the real-time subagent (Task) tool watcher: the file watcher
+        // manager fires delegate callbacks, the bridge forwards them as
+        // .agentFileUpdated events into SessionStore.
+        AgentFileWatcherManager.shared.delegate = AgentFileWatcherBridge.shared
+
         NSApplication.shared.setActivationPolicy(.accessory)
 
         windowManager = WindowManager()
