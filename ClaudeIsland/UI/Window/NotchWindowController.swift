@@ -21,8 +21,13 @@ class NotchWindowController: NSWindowController {
         let notchSize = screen.notchSize
         let menuBarHeight = screen.menuBarHeight
 
-        // Window covers full width at top, tall enough for largest content (chat view)
-        let windowHeight: CGFloat = 750
+        // Window covers the full visible area below the menu bar so that centered
+        // content (e.g. the plan viewer) can be vertically centered on the real screen.
+        // `max(750, …)` preserves the old minimum on pathologically small displays.
+        // This is safe: the PassThroughHostingView hit-test is content-bound, so enlarging
+        // the window canvas does not expand the clickable area — only the closed pill and
+        // the opened panel rects accept events. See NotchViewController.swift.
+        let windowHeight: CGFloat = max(750, screenFrame.height - menuBarHeight)
         let windowFrame = NSRect(
             x: screenFrame.origin.x,
             y: screenFrame.maxY - windowHeight,

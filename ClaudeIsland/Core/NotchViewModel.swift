@@ -23,11 +23,22 @@ enum NotchOpenReason {
     case unknown
 }
 
+/// Where the plan viewer should return to when dismissed.
+/// Captured at the moment the plan tile is tapped so we don't need a separate
+/// "previous content" piece of state; it lives only while the plan is on screen.
+enum ReturnTarget: Equatable {
+    case instances
+    case chat(SessionState)
+}
+
 enum NotchContentType: Equatable {
     case instances
     case menu
     case chat(SessionState)
     case stats
+    /// Full-plan viewer anchored to the center of the screen.
+    /// Carries the plan markdown by value (snapshot at tap time) plus where to return on dismiss.
+    case plan(text: String, returnTo: ReturnTarget)
 
     var id: String {
         switch self {
@@ -35,6 +46,7 @@ enum NotchContentType: Equatable {
         case .menu: return "menu"
         case .chat(let session): return "chat-\(session.sessionId)"
         case .stats: return "stats"
+        case .plan: return "plan"
         }
     }
 }
@@ -89,7 +101,27 @@ class NotchViewModel: ObservableObject {
                 width: min(screenRect.width * 0.4, 480),
                 height: 320
             )
+        case .plan:
+            // Full-plan viewer — centered on the screen, large enough to comfortably
+            // read a multi-section markdown document without feeling cramped.
+            return CGSize(
+                width: min(screenRect.width * 0.6, 760),
+                height: min(screenRect.height * 0.75, 720)
+            )
         }
+    }
+
+    /// Where the currently-visible panel anchors on the screen.
+    /// Plan viewer centers on the screen; everything else clings to the top-right.
+    var panelAnchor: PanelAnchor {
+        if case .plan = contentType { return .center }
+        return .topTrailing
+    }
+
+    /// Current opened panel rect in screen coordinates, routed through `panelAnchor`.
+    /// Single source of truth for both the SwiftUI layout and the hit-test pipeline.
+    var currentPanelScreenRect: CGRect {
+        geometry.panelScreenRect(for: openedSize, anchor: panelAnchor)
     }
 
     // MARK: - Animation
@@ -209,7 +241,7 @@ class NotchViewModel: ObservableObject {
             // visible notch tab to dismiss the panel. With the top-right reposition, the notch rect
             // overlaps the opened panel's top-right header — including the three-dots menu button —
             // so the toggle branch was firing on every header button click and snapping the panel shut.
-            if geometry.isPointOutsidePanel(location, size: openedSize) {
+            if !currentPanelScreenRect.contains(location) {
                 notchClose()
                 repostClickAt(location)
             }
@@ -321,6 +353,25 @@ class NotchViewModel: ObservableObject {
     func showStats() { contentType = .stats }
 
     func exitStats() { contentType = .instances }
+
+    /// Open the full-plan viewer centered on the screen.
+    /// The plan markdown is captured by value so the viewer is decoupled from any
+    /// later mutation on the underlying chat item.
+    func showPlan(text: String, returnTo: ReturnTarget) {
+        contentType = .plan(text: text, returnTo: returnTo)
+    }
+
+    /// Dismiss the plan viewer and return to whatever the user was looking at.
+    func exitPlan() {
+        if case .plan(_, let target) = contentType {
+            switch target {
+            case .instances:
+                contentType = .instances
+            case .chat(let session):
+                contentType = .chat(session)
+            }
+        }
+    }
 
     func triggerProjectScans(for cwds: [String]) {
         Task { [weak self] in

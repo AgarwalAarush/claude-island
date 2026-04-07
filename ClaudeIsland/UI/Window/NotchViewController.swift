@@ -38,38 +38,41 @@ class NotchViewController: NSViewController {
     override func loadView() {
         hostingView = PassThroughHostingView(rootView: NotchView(viewModel: viewModel))
 
-        // Calculate the hit-test rect based on panel state
+        // Calculate the hit-test rect based on panel state.
+        //
+        // Window coordinates: origin at bottom-left, Y increases upward.
+        // Screen coordinates: origin at bottom-left, Y increases upward.
+        // The window is positioned so its top edge aligns with the top of the screen:
+        //     window.minY (screen) = screenRect.maxY - windowHeight
+        // So to convert a screen-space rect to window-local coords we subtract
+        // that window origin from the rect.
         hostingView.hitTestRect = { [weak self] in
             guard let self = self else { return .zero }
             let vm = self.viewModel
             let geometry = vm.geometry
-
-            // Window coordinates: origin at bottom-left, Y increases upward.
-            // The window is positioned at top of screen, so top-of-window = `windowHeight`.
-            // The floating pill lives at `(screenMax - rightInset, screenMax - menuBarHeight - topInset)`
-            // in screen coords, which maps to the same right-edge math in window coords.
-            let windowHeight = geometry.windowHeight
-            let screenWidth = geometry.screenRect.width
-            let topOffset = geometry.menuBarHeight + NotchGeometry.topInset
-            let rightInset = NotchGeometry.rightInset
+            let windowOriginY = geometry.screenRect.maxY - geometry.windowHeight
+            let windowOriginX = geometry.screenRect.minX
 
             switch vm.status {
             case .opened:
-                let panelSize = vm.openedSize
-                let panelWidth = panelSize.width + 52  // Account for corner radius padding
-                let panelHeight = panelSize.height
+                // Route through the single source of truth on the view model — works for
+                // both top-right anchored panels (chat/stats/menu/instances) and
+                // center-anchored panels (plan viewer) with no per-mode branching.
+                let screenRect = vm.currentPanelScreenRect
                 return CGRect(
-                    x: screenWidth - panelWidth - rightInset,
-                    y: windowHeight - topOffset - panelHeight,
-                    width: panelWidth,
-                    height: panelHeight
-                )
+                    x: screenRect.minX - windowOriginX,
+                    y: screenRect.minY - windowOriginY,
+                    width: screenRect.width,
+                    height: screenRect.height
+                ).insetBy(dx: -8, dy: -8) // small grace padding so edge clicks register
             case .closed, .popping:
                 // When closed, use the indicator rect anchored top-right with hover padding
                 let notchRect = geometry.deviceNotchRect
+                let topOffset = geometry.menuBarHeight + NotchGeometry.topInset
+                let rightInset = NotchGeometry.rightInset
                 return CGRect(
-                    x: screenWidth - notchRect.width - rightInset - 10,
-                    y: windowHeight - topOffset - notchRect.height - 5,
+                    x: geometry.screenRect.width - notchRect.width - rightInset - 10,
+                    y: geometry.windowHeight - topOffset - notchRect.height - 5,
                     width: notchRect.width + 20,
                     height: notchRect.height + 10
                 )
