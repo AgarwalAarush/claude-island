@@ -546,6 +546,13 @@ struct KillShellResultContent: View {
 
 struct ExitPlanModeResultContent: View {
     let result: ExitPlanModeResult
+    @EnvironmentObject var viewModel: NotchViewModel
+    @State private var isHovered: Bool = false
+
+    private var hasOpenablePlan: Bool {
+        if let plan = result.plan, !plan.isEmpty { return true }
+        return false
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
@@ -564,6 +571,38 @@ struct ExitPlanModeResultContent: View {
                     .font(.system(size: 11))
                     .foregroundColor(.white.opacity(0.5))
                     .lineLimit(6)
+            }
+
+            if hasOpenablePlan {
+                HStack(spacing: 4) {
+                    Image(systemName: "arrow.up.left.and.arrow.down.right")
+                        .font(.system(size: 9, weight: .medium))
+                    Text("View full plan")
+                        .font(.system(size: 10, weight: .medium))
+                }
+                .foregroundColor(isHovered ? .white.opacity(0.85) : .white.opacity(0.35))
+                .padding(.top, 2)
+            }
+        }
+        .padding(hasOpenablePlan ? 8 : 0)
+        .background(
+            RoundedRectangle(cornerRadius: 6)
+                .fill(isHovered && hasOpenablePlan ? Color.white.opacity(0.06) : Color.clear)
+        )
+        .contentShape(Rectangle())
+        .onHover { isHovered = $0 }
+        .onTapGesture {
+            guard let plan = result.plan, !plan.isEmpty else { return }
+            // Snapshot the return target from the current content type. Most taps come
+            // from inside a ChatView, so the user returns to the same chat after closing.
+            let returnTarget: ReturnTarget = {
+                if case .chat(let session) = viewModel.contentType {
+                    return .chat(session)
+                }
+                return .instances
+            }()
+            withAnimation(.spring(response: 0.35, dampingFraction: 0.82)) {
+                viewModel.showPlan(text: plan, returnTo: returnTarget)
             }
         }
     }

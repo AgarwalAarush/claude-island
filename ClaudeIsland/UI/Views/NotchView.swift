@@ -186,10 +186,19 @@ struct NotchView: View {
             }
         }
         .opacity(isVisible ? 1 : 0)
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
-        .padding(.top, viewModel.geometry.menuBarHeight + 8)
-        .padding(.trailing, 8)
+        .frame(
+            maxWidth: .infinity,
+            maxHeight: .infinity,
+            alignment: viewModel.panelAnchor == .center ? .center : .topTrailing
+        )
+        // Top/trailing padding positions the panel in the top-right corner for most
+        // modes. For center-anchored modes (plan viewer) we drop the padding entirely
+        // so SwiftUI centers the content within the full window canvas.
+        .padding(.top, viewModel.panelAnchor == .center ? 0 : viewModel.geometry.menuBarHeight + 8)
+        .padding(.trailing, viewModel.panelAnchor == .center ? 0 : 8)
+        .animation(openAnimation, value: viewModel.panelAnchor)
         .preferredColorScheme(.dark)
+        .environmentObject(viewModel)
         .onAppear {
             sessionMonitor.startMonitoring()
         }
@@ -216,20 +225,33 @@ struct NotchView: View {
         isProcessing || hasPendingPermission || hasWaitingForInput
     }
 
+    /// True when the current content type brings its own full-height header and
+    /// the floating pill's header row should be skipped entirely (plan viewer).
+    private var contentProvidesOwnHeader: Bool {
+        if case .plan = viewModel.contentType { return true }
+        return false
+    }
+
     @ViewBuilder
     private var notchLayout: some View {
         VStack(alignment: .leading, spacing: 0) {
-            // Header row - always present, contains crab and spinner that persist across states
-            headerRow
-                .frame(height: max(24, closedNotchSize.height))
+            // Header row - present for all states except modes that render their own full header.
+            if !contentProvidesOwnHeader {
+                headerRow
+                    .frame(height: max(24, closedNotchSize.height))
+            }
 
             // Main content only when opened
             if viewModel.status == .opened {
                 contentView
                     .frame(width: notchSize.width - 24) // Fixed width to prevent reflow
+                    .frame(maxHeight: contentProvidesOwnHeader ? .infinity : nil)
                     .transition(
                         .asymmetric(
-                            insertion: .scale(scale: 0.8, anchor: .topTrailing)
+                            insertion: .scale(
+                                scale: 0.8,
+                                anchor: viewModel.panelAnchor == .center ? .center : .topTrailing
+                            )
                                 .combined(with: .opacity)
                                 .animation(.smooth(duration: 0.35)),
                             removal: .opacity.animation(.easeOut(duration: 0.15))
@@ -398,6 +420,8 @@ struct NotchView: View {
                     sessionMonitor: sessionMonitor,
                     viewModel: viewModel
                 )
+            case .plan(let text, _):
+                PlanView(plan: text, viewModel: viewModel)
             }
         }
         .frame(width: notchSize.width - 24) // Fixed width to prevent text reflow
