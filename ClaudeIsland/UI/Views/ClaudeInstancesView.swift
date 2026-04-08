@@ -160,7 +160,48 @@ struct InstanceRow: View {
         return toolName == "AskUserQuestion"
     }
 
+    /// Whether to show the hover-expanded permission details under the row.
+    /// Plans get their own tile + center viewer; interactive tools have no
+    /// tool input to expand; so both are excluded here.
+    private var showPermissionDetailsOnHover: Bool {
+        isHovered
+            && isWaitingForApproval
+            && session.pendingPlanText == nil
+            && !isInteractiveTool
+            && session.pendingToolName != nil
+    }
+
     var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            mainRow
+
+            if showPermissionDetailsOnHover,
+               let toolName = session.pendingToolName {
+                PermissionDetailsExpansion(
+                    tool: toolName,
+                    fields: session.pendingToolInputFields ?? [:]
+                )
+                .padding(.leading, 32)  // align roughly with the title (state indicator + spacing)
+                .padding(.trailing, 14)
+                .padding(.bottom, 10)
+                .transition(.opacity.combined(with: .move(edge: .top)))
+            }
+        }
+        .contentShape(Rectangle())
+        .onTapGesture { onChat() }
+        .animation(.spring(response: 0.3, dampingFraction: 0.8), value: isWaitingForApproval)
+        .animation(.spring(response: 0.28, dampingFraction: 0.85), value: showPermissionDetailsOnHover)
+        .background(
+            RoundedRectangle(cornerRadius: 12)
+                .fill(isHovered ? Color.white.opacity(0.06) : Color.clear)
+        )
+        .onHover { isHovered = $0 }
+        .task {
+            isYabaiAvailable = await WindowFinder.shared.isYabaiAvailable()
+        }
+    }
+
+    private var mainRow: some View {
         HStack(alignment: .center, spacing: 10) {
             // State indicator on left
             stateIndicator
@@ -338,19 +379,6 @@ struct InstanceRow: View {
         .padding(.leading, 8)
         .padding(.trailing, 14)
         .padding(.vertical, 10)
-        .contentShape(Rectangle())
-        .onTapGesture {
-            onChat()
-        }
-        .animation(.spring(response: 0.3, dampingFraction: 0.8), value: isWaitingForApproval)
-        .background(
-            RoundedRectangle(cornerRadius: 12)
-                .fill(isHovered ? Color.white.opacity(0.06) : Color.clear)
-        )
-        .onHover { isHovered = $0 }
-        .task {
-            isYabaiAvailable = await WindowFinder.shared.isYabaiAvailable()
-        }
     }
 
     @ViewBuilder
@@ -381,6 +409,114 @@ struct InstanceRow: View {
         }
     }
 
+}
+
+// MARK: - Permission Details Expansion
+
+/// Compact expansion shown under an `InstanceRow` on hover when a session is
+/// waiting for permission approval. Mirrors the per-tool detail rendering in
+/// `ChatApprovalBar` so hovering the row reveals the same info (e.g. full Bash
+/// command + description) without needing to click into the chat first.
+/// Kept local to this file — the chat bar and this expansion are deliberately
+/// styled for different footprints (larger vs. compact), so sharing the body
+/// rendering would force awkward parameterization for marginal reuse.
+struct PermissionDetailsExpansion: View {
+    let tool: String
+    let fields: [String: String]
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 3) {
+            body(for: tool)
+        }
+        .padding(.horizontal, 8)
+        .padding(.vertical, 6)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(
+            RoundedRectangle(cornerRadius: 6)
+                .fill(Color.white.opacity(0.04))
+        )
+    }
+
+    @ViewBuilder
+    private func body(for tool: String) -> some View {
+        switch tool {
+        case "Bash":
+            bashBody
+        case "Edit", "Write":
+            editLikeBody
+        default:
+            genericBody
+        }
+    }
+
+    @ViewBuilder
+    private var bashBody: some View {
+        if let command = fields["command"], !command.isEmpty {
+            Text(command)
+                .font(.system(size: 11, design: .monospaced))
+                .foregroundColor(.white.opacity(0.75))
+                .lineLimit(6)
+                .truncationMode(.tail)
+                .textSelection(.enabled)
+                .fixedSize(horizontal: false, vertical: true)
+                .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        if let description = fields["description"], !description.isEmpty {
+            Text(description)
+                .font(.system(size: 10))
+                .foregroundColor(.white.opacity(0.45))
+                .italic()
+                .lineLimit(2)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+    }
+
+    @ViewBuilder
+    private var editLikeBody: some View {
+        if let path = fields["file_path"], !path.isEmpty {
+            HStack(spacing: 4) {
+                Image(systemName: "doc.text")
+                    .font(.system(size: 9))
+                Text(URL(fileURLWithPath: path).lastPathComponent)
+                    .font(.system(size: 11, design: .monospaced))
+            }
+            .foregroundColor(.white.opacity(0.75))
+        }
+        if tool == "Write", let content = fields["content"], !content.isEmpty {
+            Text(content)
+                .font(.system(size: 10, design: .monospaced))
+                .foregroundColor(.white.opacity(0.5))
+                .lineLimit(5)
+                .truncationMode(.tail)
+                .fixedSize(horizontal: false, vertical: true)
+                .frame(maxWidth: .infinity, alignment: .leading)
+        } else if tool == "Edit", let new = fields["new_string"], !new.isEmpty {
+            Text(new)
+                .font(.system(size: 10, design: .monospaced))
+                .foregroundColor(.white.opacity(0.5))
+                .lineLimit(5)
+                .truncationMode(.tail)
+                .fixedSize(horizontal: false, vertical: true)
+                .frame(maxWidth: .infinity, alignment: .leading)
+        }
+    }
+
+    @ViewBuilder
+    private var genericBody: some View {
+        let lines = fields
+            .sorted { $0.key < $1.key }
+            .map { "\($0.key): \($0.value)" }
+            .joined(separator: "\n")
+        if !lines.isEmpty {
+            Text(lines)
+                .font(.system(size: 11))
+                .foregroundColor(.white.opacity(0.5))
+                .lineLimit(5)
+                .truncationMode(.tail)
+                .fixedSize(horizontal: false, vertical: true)
+                .frame(maxWidth: .infinity, alignment: .leading)
+        }
+    }
 }
 
 // MARK: - Inline Approval Buttons
