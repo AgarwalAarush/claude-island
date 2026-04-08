@@ -136,6 +136,7 @@ class NotchViewModel: ObservableObject {
     private let events = EventMonitors.shared
     private var hoverTimer: DispatchWorkItem?
     private var mouseLeaveTimer: DispatchWorkItem?
+    private var planNotificationTimer: DispatchWorkItem?
 
     // MARK: - Initialization
 
@@ -207,6 +208,10 @@ class NotchViewModel: ObservableObject {
         if isHovering {
             mouseLeaveTimer?.cancel()
             mouseLeaveTimer = nil
+            // User engaged with a plan-notification auto-open — cancel the
+            // 2s auto-dismiss and fall through to the normal mouse-leave flow.
+            planNotificationTimer?.cancel()
+            planNotificationTimer = nil
         }
 
         // Start hover timer to auto-expand after the configured delay
@@ -318,6 +323,10 @@ class NotchViewModel: ObservableObject {
         if case .chat(let session) = contentType {
             currentChatSession = session
         }
+        // Invalidate any pending plan-notification timer so a stale fire can't
+        // re-close a subsequently-reopened panel.
+        planNotificationTimer?.cancel()
+        planNotificationTimer = nil
         status = .closed
         contentType = .instances
     }
@@ -382,6 +391,28 @@ class NotchViewModel: ObservableObject {
                 }
             }
         }
+    }
+
+    /// Schedule an auto-close for a plan-triggered notification open.
+    /// Cancelled automatically if the user hovers into the panel before it fires
+    /// (see `handleMouseMove`), in which case the normal `mouseLeaveTimer` flow
+    /// takes over once the cursor exits.
+    func schedulePlanNotificationAutoClose() {
+        planNotificationTimer?.cancel()
+        let workItem = DispatchWorkItem { [weak self] in
+            guard let self = self else { return }
+            // Only close if the panel is still the untouched notification open.
+            // If the user is hovering, let the mouse-leave flow handle dismiss.
+            guard self.status == .opened,
+                  self.openReason == .notification,
+                  !self.isHovering else { return }
+            self.notchClose()
+        }
+        planNotificationTimer = workItem
+        DispatchQueue.main.asyncAfter(
+            deadline: .now() + NotchTunables.planNotificationAutoCloseDelay,
+            execute: workItem
+        )
     }
 
     /// Perform boot animation: expand briefly then collapse

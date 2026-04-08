@@ -461,6 +461,16 @@ struct NotchView: View {
            viewModel.status == .closed &&
            !TerminalVisibilityDetector.isTerminalVisibleOnCurrentSpace() {
             viewModel.notchOpen(reason: .notification)
+
+            // If the newly pending session is an ExitPlanMode plan, auto-dismiss
+            // after 2s unless the user starts interacting (hover cancels it and
+            // falls through to the normal mouse-leave flow).
+            let newPlanArrived = sessions.contains { session in
+                newPendingIds.contains(session.stableId) && session.pendingPlanText != nil
+            }
+            if newPlanArrived {
+                viewModel.schedulePlanNotificationAutoClose()
+            }
         }
 
         previousPendingIds = currentIds

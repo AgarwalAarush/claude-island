@@ -16,4 +16,9 @@ enum NotchTunables {
     /// Grace period between mouse leaving the opened panel and auto-collapse.
     /// Avoids immediate close on accidental cursor flicks across the edge.
     static let mouseLeaveCloseDelay: TimeInterval = 0.15
+
+    /// How long a plan-triggered auto-open (ExitPlanMode notification) stays on
+    /// screen before it auto-dismisses — unless the user hovers into the panel,
+    /// in which case the normal mouse-leave flow takes over.
+    static let planNotificationAutoCloseDelay: TimeInterval = 2.0
 }
