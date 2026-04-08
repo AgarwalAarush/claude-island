@@ -14,6 +14,14 @@ import socket
 import sys
 
 SOCKET_PATH = "/tmp/claude-island.sock"
+# TCP fallback for remote (SSH) hosts. The Mac side still listens on the unix
+# socket above; on remotes, sshd's RemoteForward publishes that unix socket as
+# a TCP listener on 127.0.0.1:TCP_FALLBACK_PORT. We prefer unix when present
+# (correct on the Mac itself) and fall back to TCP otherwise. TCP is used here
+# specifically because TCP listeners don't leave stale files behind on
+# ungraceful disconnect — unix-socket forwarding does, and without sudo on the
+# remote we can't enable sshd's StreamLocalBindUnlink to fix it.
+TCP_FALLBACK_PORT = 9876
 TIMEOUT_SECONDS = 300  # 5 minutes for permission decisions
 OFFSET_DIR = os.path.expanduser("~/.claude/.island-offsets")
 # Hard cap per chunk to avoid blowing the socket buffer on a giant first sync.
@@ -141,12 +149,40 @@ def attach_jsonl_chunk(state, session_id, cwd):
         pass
 
 
+def _open_socket():
+    """
+    Open a stream connection to the Mac app. Try the unix socket first (the
+    Mac itself), fall back to TCP on 127.0.0.1:TCP_FALLBACK_PORT (remote SSH
+    hosts where sshd RemoteForward publishes the Mac's unix socket as a TCP
+    listener). Returns a connected SOCK_STREAM socket on success, or None.
+    """
+    if os.path.exists(SOCKET_PATH):
+        try:
+            s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+            s.settimeout(TIMEOUT_SECONDS)
+            s.connect(SOCKET_PATH)
+            return s
+        except OSError:
+            try:
+                s.close()
+            except OSError:
+                pass
+
+    try:
+        s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        s.settimeout(TIMEOUT_SECONDS)
+        s.connect(("127.0.0.1", TCP_FALLBACK_PORT))
+        return s
+    except OSError:
+        return None
+
+
 def send_event(state):
     """Send event to app, return response if any"""
     try:
-        sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
-        sock.settimeout(TIMEOUT_SECONDS)
-        sock.connect(SOCKET_PATH)
+        sock = _open_socket()
+        if sock is None:
+            return None
         sock.sendall(json.dumps(state).encode())
 
         # For permission requests, wait for response
