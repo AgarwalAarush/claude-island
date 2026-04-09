@@ -356,7 +356,7 @@ struct NotchView: View {
             } label: {
                 Image(systemName: viewModel.contentType == .stats ? "xmark" : "chart.bar.xaxis")
                     .font(.system(size: 11, weight: .medium))
-                    .foregroundColor(.white.opacity(viewModel.contentType == .stats ? 1.0 : 0.6))
+                    .foregroundColor(.white.opacity(viewModel.contentType == .stats ? 1.0 : 0.7))
                     .frame(width: 22, height: 22)
                     .contentShape(Rectangle())
             }
@@ -376,7 +376,7 @@ struct NotchView: View {
                 ZStack(alignment: .topTrailing) {
                     Image(systemName: viewModel.contentType == .menu ? "xmark" : "line.3.horizontal")
                         .font(.system(size: 11, weight: .medium))
-                        .foregroundColor(isMenuButtonHovered ? .white.opacity(0.8) : .white.opacity(0.4))
+                        .foregroundColor(isMenuButtonHovered ? .white.opacity(0.8) : .white.opacity(0.7))
                         .frame(width: 22, height: 22)
                         .background(
                             RoundedRectangle(cornerRadius: 6)
@@ -459,6 +459,7 @@ struct NotchView: View {
 
         if !newPendingIds.isEmpty &&
            viewModel.status == .closed &&
+           AppSettings.autoExpandOnPermission &&
            !TerminalVisibilityDetector.isTerminalVisibleOnCurrentSpace() {
             viewModel.notchOpen(reason: .notification)
 

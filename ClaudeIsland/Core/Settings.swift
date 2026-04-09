@@ -38,6 +38,7 @@ enum AppSettings {
 
     private enum Keys {
         static let notificationSound = "notificationSound"
+        static let autoExpandOnPermission = "autoExpandOnPermission"
     }
 
     // MARK: - Notification Sound
@@ -54,5 +55,14 @@ enum AppSettings {
         set {
             defaults.set(newValue.rawValue, forKey: Keys.notificationSound)
         }
+    }
+
+    // MARK: - Auto-Expand
+
+    /// Whether the overlay automatically expands when a permission request or plan arrives.
+    /// When off, only the amber indicator shows in the pill.
+    static var autoExpandOnPermission: Bool {
+        get { defaults.object(forKey: Keys.autoExpandOnPermission) as? Bool ?? true }
+        set { defaults.set(newValue, forKey: Keys.autoExpandOnPermission) }
     }
 }
