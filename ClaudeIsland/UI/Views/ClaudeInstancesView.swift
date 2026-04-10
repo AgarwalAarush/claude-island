@@ -184,13 +184,27 @@ struct InstanceRow: View {
                 .padding(.leading, 32)  // align roughly with the title (state indicator + spacing)
                 .padding(.trailing, 14)
                 .padding(.bottom, 10)
-                .transition(.opacity.combined(with: .move(edge: .top)))
+                // Asymmetric: insertion slides down from the top edge, but removal
+                // is pure opacity so nothing slides up through the row above and
+                // leaves a ghost outline during the fade-out.
+                .transition(.asymmetric(
+                    insertion: .opacity.combined(with: .move(edge: .top)),
+                    removal: .opacity
+                ))
             }
         }
         .contentShape(Rectangle())
         .onTapGesture { onChat() }
         .animation(.spring(response: 0.3, dampingFraction: 0.8), value: isWaitingForApproval)
-        .animation(.spring(response: 0.28, dampingFraction: 0.85), value: showPermissionDetailsOnHover)
+        // Showing: snappy spring. Hiding: slightly slower easeOut with a small
+        // delay so the expansion lingers for a beat before collapsing — prevents
+        // accidental flicker-close on cursor wobbles near the row edge.
+        .animation(
+            showPermissionDetailsOnHover
+                ? .spring(response: 0.28, dampingFraction: 0.85)
+                : .easeOut(duration: 0.34).delay(0.1),
+            value: showPermissionDetailsOnHover
+        )
         .background(
             RoundedRectangle(cornerRadius: 12)
                 .fill(isHovered ? Color.white.opacity(0.06) : Color.clear)
