@@ -80,15 +80,10 @@ struct NotchGeometry: Sendable {
         notchScreenRect.insetBy(dx: -10, dy: -5).contains(point)
     }
 
-    /// Check if a point is in the opened panel area (top-right anchored — legacy helper).
+    /// Check if a point is in the opened panel area, accounting for the current anchor.
     /// Includes a small grace inset so floating-point cursor jitter at the panel edge
     /// doesn't briefly flip hover state and trigger the mouse-leave close timer.
-    func isPointInOpenedPanel(_ point: CGPoint, size: CGSize) -> Bool {
-        openedScreenRect(for: size).insetBy(dx: -4, dy: -4).contains(point)
-    }
-
-    /// Check if a point is outside the opened panel (top-right anchored — legacy helper)
-    func isPointOutsidePanel(_ point: CGPoint, size: CGSize) -> Bool {
-        !openedScreenRect(for: size).contains(point)
+    func isPointInOpenedPanel(_ point: CGPoint, size: CGSize, anchor: PanelAnchor) -> Bool {
+        panelScreenRect(for: size, anchor: anchor).insetBy(dx: -4, dy: -4).contains(point)
     }
 }

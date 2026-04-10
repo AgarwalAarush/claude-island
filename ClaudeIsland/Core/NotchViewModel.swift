@@ -191,7 +191,7 @@ class NotchViewModel: ObservableObject {
 
     private func handleMouseMove(_ location: CGPoint) {
         let inNotch = geometry.isPointInNotch(location)
-        let inOpened = status == .opened && geometry.isPointInOpenedPanel(location, size: openedSize)
+        let inOpened = status == .opened && geometry.isPointInOpenedPanel(location, size: openedSize, anchor: panelAnchor)
 
         let newHovering = inNotch || inOpened
 
