@@ -174,6 +174,7 @@ struct InstanceRow: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             mainRow
+                .zIndex(1) // Render above the expansion so it slides "under" the row
 
             if showPermissionDetailsOnHover,
                let toolName = session.pendingToolName {
@@ -184,15 +185,15 @@ struct InstanceRow: View {
                 .padding(.leading, 32)  // align roughly with the title (state indicator + spacing)
                 .padding(.trailing, 14)
                 .padding(.bottom, 10)
-                // Asymmetric: insertion slides down from the top edge, but removal
-                // is pure opacity so nothing slides up through the row above and
-                // leaves a ghost outline during the fade-out.
-                .transition(.asymmetric(
-                    insertion: .opacity.combined(with: .move(edge: .top)),
-                    removal: .opacity
-                ))
+                // Slide down from directly below the main row on insert,
+                // slide back up under it on removal. The .clipped() on
+                // the wrapper ensures the expansion is never visible
+                // above its natural frame — it looks like it emerges
+                // from and tucks back under the title/subscript area.
+                .transition(.move(edge: .top))
             }
         }
+        .clipped()
         .contentShape(Rectangle())
         .onTapGesture { onChat() }
         .animation(.spring(response: 0.3, dampingFraction: 0.8), value: isWaitingForApproval)
