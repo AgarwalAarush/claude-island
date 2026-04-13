@@ -22,7 +22,8 @@ SOCKET_PATH = "/tmp/claude-island.sock"
 # ungraceful disconnect — unix-socket forwarding does, and without sudo on the
 # remote we can't enable sshd's StreamLocalBindUnlink to fix it.
 TCP_FALLBACK_PORT = 9876
-TIMEOUT_SECONDS = 300  # 5 minutes for permission decisions
+CONNECT_TIMEOUT = 2     # Fast bail when the app isn't listening
+RECV_TIMEOUT = 300      # 5 minutes for permission decisions
 OFFSET_DIR = os.path.expanduser("~/.claude/.island-offsets")
 # Hard cap per chunk to avoid blowing the socket buffer on a giant first sync.
 # Anything beyond this is sent in the next hook fire — Claude Code fires hooks
@@ -159,7 +160,7 @@ def _open_socket():
     if os.path.exists(SOCKET_PATH):
         try:
             s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
-            s.settimeout(TIMEOUT_SECONDS)
+            s.settimeout(CONNECT_TIMEOUT)
             s.connect(SOCKET_PATH)
             return s
         except OSError:
@@ -170,7 +171,7 @@ def _open_socket():
 
     try:
         s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        s.settimeout(TIMEOUT_SECONDS)
+        s.settimeout(CONNECT_TIMEOUT)
         s.connect(("127.0.0.1", TCP_FALLBACK_PORT))
         return s
     except OSError:
@@ -185,8 +186,9 @@ def send_event(state):
             return None
         sock.sendall(json.dumps(state).encode())
 
-        # For permission requests, wait for response
+        # For permission requests, wait for response (long timeout)
         if state.get("status") == "waiting_for_approval":
+            sock.settimeout(RECV_TIMEOUT)
             response = sock.recv(4096)
             sock.close()
             if response:
